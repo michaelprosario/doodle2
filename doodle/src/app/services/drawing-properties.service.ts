@@ -40,7 +40,7 @@ export class DrawingPropertiesService {
       fill: '#000000',
       fillOpacity: 1,
       fillType: 'solid',
-      stroke: 'none',
+      stroke: '#000000',
       strokeWidth: 2,
       strokeOpacity: 1,
       strokeType: 'solid',
@@ -102,6 +102,14 @@ export class DrawingPropertiesService {
   }
 
   /**
+   * Reset to default properties
+   */
+  resetToDefaults(): void {
+    this.propertiesSignal.set(this.getDefaultProperties());
+    this.saveToStorage();
+  }
+
+  /**
    * Set stroke style (solid, dashed, dotted)
    */
   setStrokeStyle(style: 'solid' | 'dashed' | 'dotted' | 'none'): void {
@@ -158,14 +166,6 @@ export class DrawingPropertiesService {
         strokeType: 'none'
       });
     }
-  }
-
-  /**
-   * Reset to default properties
-   */
-  resetToDefaults(): void {
-    this.propertiesSignal.set(this.getDefaultProperties());
-    this.saveToStorage();
   }
 
   /**
@@ -324,7 +324,16 @@ export class DrawingPropertiesService {
       const stored = localStorage.getItem(this.STORAGE_KEY);
       if (stored) {
         const props = JSON.parse(stored);
+        // Migration: Fix old default where stroke was 'none'
+        // If both fill and stroke are default values, use new defaults
+        if (props.stroke === 'none' && props.fill === '#000000' && props.fillType === 'solid') {
+          console.log('Migrating old drawing properties - enabling stroke');
+          props.stroke = '#000000';
+          props.strokeType = 'solid';
+        }
         this.propertiesSignal.set(props);
+        // Save migrated properties
+        this.saveToStorage();
       }
     } catch (error) {
       console.error('Failed to load drawing properties:', error);

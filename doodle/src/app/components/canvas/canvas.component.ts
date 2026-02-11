@@ -100,6 +100,9 @@ import { FrameService } from '../../services/frame.service';
                     [attr.fill]="getAttr(element, 'fill')"
                     [attr.stroke]="getAttr(element, 'stroke')"
                     [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                    [attr.stroke-opacity]="getAttr(element, 'strokeOpacity')"
+                    [attr.stroke-linecap]="getAttr(element, 'strokeLinecap')"
+                    [attr.stroke-linejoin]="getAttr(element, 'strokeLinejoin')"
                   />
                 }
               }
@@ -502,19 +505,25 @@ export class CanvasComponent implements OnInit, OnDestroy {
 
   private updateFreehandPreview(): void {
     const pathPoints = this.toolService.getPathPoints();
+    console.log('updateFreehandPreview - pathPoints:', pathPoints.length);
     if (pathPoints.length < 2) return;
 
     const properties = this.drawingPropertiesService.properties();
+    console.log('updateFreehandPreview - properties:', properties);
+    // Ensure freehand tools have a visible stroke
+    const stroke = (properties.stroke === 'none' || !properties.stroke) ? '#000000' : properties.stroke;
     const attrs = {
       fill: 'none', // Freehand paths should not have fill
-      stroke: properties.stroke,
+      stroke: stroke,
       strokeWidth: properties.strokeWidth,
       strokeOpacity: properties.strokeOpacity,
       strokeLinecap: properties.strokeLinecap,
       strokeLinejoin: properties.strokeLinejoin
     };
+    console.log('updateFreehandPreview - attrs:', attrs);
 
     const element = this.drawingEngine.createPathFromPoints(pathPoints, attrs);
+    console.log('updateFreehandPreview - element:', element);
     this.previewElement.set(element);
   }
 
@@ -539,7 +548,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
   };
 
   private finalizeDrawing(): void {
-    const preview = this.previewElement();
+    let preview = this.previewElement();
     const frame = this.currentFrame();
     const projId = this.projectId();
     const scnId = this.sceneId();
@@ -553,7 +562,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
       elementCount: frame?.elements?.length
     });
 
-    // For freehand tools, ensure we have enough points
+    // For freehand tools, ensure we have enough points and create final element
     if (this.isFreehandTool()) {
       const pathPoints = this.toolService.getPathPoints();
       console.log('Freehand tool - path points:', pathPoints.length);
@@ -565,6 +574,20 @@ export class CanvasComponent implements OnInit, OnDestroy {
         this.toolService.clearPathPoints();
         return;
       }
+      
+      // Create or recreate the preview element from final path points
+      const properties = this.drawingPropertiesService.properties();
+      const stroke = (properties.stroke === 'none' || !properties.stroke) ? '#000000' : properties.stroke;
+      const attrs = {
+        fill: 'none',
+        stroke: stroke,
+        strokeWidth: properties.strokeWidth,
+        strokeOpacity: properties.strokeOpacity,
+        strokeLinecap: properties.strokeLinecap,
+        strokeLinejoin: properties.strokeLinejoin
+      };
+      preview = this.drawingEngine.createPathFromPoints(pathPoints, attrs);
+      console.log('Created final freehand element:', preview);
     }
 
     if (preview && frame && projId && scnId) {
@@ -599,7 +622,15 @@ export class CanvasComponent implements OnInit, OnDestroy {
   private renderFrame(frame: Frame): void {
     // Frame rendering will be implemented with drawing tools in Epic 3
     // For now, this is a placeholder
-    console.log('Rendering frame:', frame.id);
+    console.log('Rendering frame:', frame.id, 'with', frame.elements?.length || 0, 'elements');
+    if (frame.elements && frame.elements.length > 0) {
+      console.log('Frame elements:', frame.elements.map((e: any) => ({
+        type: e.type,
+        id: e.id,
+        hasAttributes: !!e.attributes,
+        attributes: e.attributes
+      })));
+    }
   }
 
   /**
@@ -615,12 +646,38 @@ export class CanvasComponent implements OnInit, OnDestroy {
    */
   private getCanvasPoint(event: MouseEvent): Point {
     const canvas = this.canvasRef.nativeElement;
-    const rect = canvas.getBoundingClientRect();
-    return screenToCanvasCoordinates(
-      event.clientX - rect.left,
-      event.clientY - rect.top,
-      canvas
-    );
+    const container = this.containerRef.nativeElement;
+    const containerRect = container.getBoundingClientRect();
+    
+    // Get mouse position relative to container center
+    const containerCenterX = containerRect.left + containerRect.width / 2;
+    const containerCenterY = containerRect.top + containerRect.height / 2;
+    
+    let x = event.clientX - containerCenterX;
+    let y = event.clientY - containerCenterY;
+    
+    // Reverse the transforms: scale(zoom) translate(panX, panY)
+    // CSS applies right-to-left, so: first translate, then scale
+    // To reverse: first divide by zoom, then subtract translate
+    const currentZoom = this.zoom();
+    const currentPanX = this.panX();
+    const currentPanY = this.panY();
+    
+    // Reverse scale
+    x = x / currentZoom;
+    y = y / currentZoom;
+    
+    // Reverse translate (panX/panY are in pre-scaled units)
+    x = x - currentPanX;
+    y = y - currentPanY;
+    
+    // Convert from center-origin to top-left origin
+    const canvasWidth = canvas.width.baseVal.value;
+    const canvasHeight = canvas.height.baseVal.value;
+    x = x + canvasWidth / 2;
+    y = y + canvasHeight / 2;
+    
+    return { x, y };
   }
 
   /**

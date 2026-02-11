@@ -1,0 +1,13 @@
+- as an animator, I can start a new scene
+- as an animator, I can manage frames connected to a scene
+- as an animator, I can draw vector graphics on frames in a scene
+- as an animator, I can use svg primitives to draw stuff
+    - rectangles
+    - lines
+    - curved lines
+    - free hand 
+- as an animator, I can select individual elements of the drawing.
+- as an animator, I can delete a element of the drawing
+- as an animator, I can save a scene
+- as an animator, I can see the previous frame slightly to help guide my animation
+- as an animator, I can add, update, delete frames in a scene.

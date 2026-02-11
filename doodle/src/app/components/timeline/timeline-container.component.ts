@@ -1,8 +1,9 @@
-import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TimelineStateService } from '../../services/timeline-state.service';
 import { FrameService } from '../../services/frame.service';
 import { Frame } from '../../models/frame.model';
+import { NotificationService } from '../../services/notification.service';
 
 @Component({
   selector: 'app-timeline-container',
@@ -341,8 +342,16 @@ import { Frame } from '../../models/frame.model';
 export class TimelineContainerComponent implements OnInit, OnDestroy {
   private timelineState = inject(TimelineStateService);
   private frameService = inject(FrameService);
+  private notificationService = inject(NotificationService);
 
-  protected frames = signal<Frame[]>([]);
+  // Inputs
+  projectId = input.required<string>();
+  sceneId = input.required<string>();
+  frames = input<Frame[]>([]);
+  
+  // Output for when frames are modified
+  framesChanged = output<void>();
+
   protected collapsed = signal(false);
   protected isPlaying = signal(false);
   protected Math = Math;
@@ -367,16 +376,87 @@ export class TimelineContainerComponent implements OnInit, OnDestroy {
   }
 
   protected addFrame(): void {
-    // To be implemented with actual scene context
-    console.log('Add frame');
+    const projId = this.projectId();
+    const scnId = this.sceneId();
+    
+    if (!projId || !scnId) {
+      this.notificationService.error('No scene selected');
+      return;
+    }
+
+    try {
+      this.frameService.createFrame(projId, scnId);
+      this.notificationService.success('Frame added');
+      this.framesChanged.emit();
+    } catch (error) {
+      console.error('Failed to add frame:', error);
+      this.notificationService.error('Failed to add frame');
+    }
   }
 
   protected duplicateFrame(): void {
-    console.log('Duplicate frame');
+    const projId = this.projectId();
+    const scnId = this.sceneId();
+    const currentFrames = this.frames();
+    const currentIndex = this.currentFrame();
+    
+    if (!projId || !scnId) {
+      this.notificationService.error('No scene selected');
+      return;
+    }
+
+    if (currentIndex < 0 || currentIndex >= currentFrames.length) {
+      this.notificationService.error('No frame selected');
+      return;
+    }
+
+    try {
+      const frameToDuplicate = currentFrames[currentIndex];
+      this.frameService.duplicateFrame(projId, scnId, frameToDuplicate.id);
+      this.notificationService.success('Frame duplicated');
+      this.framesChanged.emit();
+    } catch (error) {
+      console.error('Failed to duplicate frame:', error);
+      this.notificationService.error('Failed to duplicate frame');
+    }
   }
 
   protected deleteFrame(): void {
-    console.log('Delete frame');
+    const projId = this.projectId();
+    const scnId = this.sceneId();
+    const currentFrames = this.frames();
+    const currentIndex = this.currentFrame();
+    
+    if (!projId || !scnId) {
+      this.notificationService.error('No scene selected');
+      return;
+    }
+
+    if (currentIndex < 0 || currentIndex >= currentFrames.length) {
+      this.notificationService.error('No frame selected');
+      return;
+    }
+
+    if (currentFrames.length === 1) {
+      this.notificationService.error('Cannot delete the last frame');
+      return;
+    }
+
+    try {
+      const frameToDelete = currentFrames[currentIndex];
+      this.frameService.deleteFrame(projId, scnId, frameToDelete.id);
+      this.notificationService.success('Frame deleted');
+      
+      // Adjust current frame index if needed
+      if (currentIndex >= currentFrames.length - 1) {
+        this.timelineState.setCurrentFrame(Math.max(0, currentIndex - 1));
+      }
+      
+      this.framesChanged.emit();
+    } catch (error) {
+      console.error('Failed to delete frame:', error);
+      this.notificationService.error('Failed to delete frame');
+    }
   }
 
   protected selectFrame(index: number, event: MouseEvent): void {

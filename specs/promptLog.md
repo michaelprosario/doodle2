@@ -17,3 +17,12 @@
 - Think about the approach for epic 3
 - Think about implementing in the angular project doodle
 - Document task design in epic3_tasks1.md
+
+===
+
+unfortunately, adding a frame does not seem to do anything.
+Enable me to add a frame properly to a scene.
+
+====
+
+As a user, I should be able to draw on the canvas using a pen tool.  At present, no drawing tools seem to work.

@@ -96,7 +96,12 @@ import { Scene } from '../../models/scene.model';
           </div>
 
           <!-- Timeline Component -->
-          <app-timeline-container></app-timeline-container>
+          <app-timeline-container
+            [projectId]="projectId()"
+            [sceneId]="activeScene()?.id || ''"
+            [frames]="frames()"
+            (framesChanged)="onFramesChanged()">
+          </app-timeline-container>
         </main>
 
         <!-- Properties Sidebar -->
@@ -384,6 +389,14 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
       this.timelineState.setTotalFrames(this.frames().length);
     } catch (error) {
       console.error('Failed to create frame:', error);
+    }
+  }
+
+  onFramesChanged(): void {
+    // Reload frames from the scene
+    const scene = this.activeScene();
+    if (scene) {
+      this.selectScene(scene);
     }
   }
 

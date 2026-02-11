@@ -1,3 +1,5 @@
+2/11
+
 - read specs/epic1_projectCreation.md
 - Think about the approach for epic 1 and Project Creation & Management
 - Think about implementing in the angular project doodle
@@ -29,3 +31,10 @@ As a user, I should be able to draw on the canvas using a pen tool.  At present,
 
 ====
 drawing on canvas do not work.
+
+2/12
+- write a document about the tech design of this app
+- outline principles leveraged
+- outline major services
+- outline major components
+- document in techDesign.md

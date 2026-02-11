@@ -119,11 +119,7 @@ A user-friendly, web-based SVG animation software that empowers animators to cre
 
 4. **Advanced Drawing Features**
    - Eyedropper tool (sample colors from canvas)
-   - Clone/stamp tool
    - Eraser tool (delete portions of paths)
-   - Smooth/Simplify path tool
-   - Join path tool
-   - Split path tool
 
 ### User Stories:
 - As an animator, I can draw basic shapes quickly

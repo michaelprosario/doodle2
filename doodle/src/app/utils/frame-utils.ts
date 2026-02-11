@@ -1,4 +1,5 @@
 import { Frame, SVGElement } from '../models/frame.model';
+import { SVGElementModel } from '../models/svg-element.model';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -18,7 +19,7 @@ export function cloneFrame(frame: Frame, newSceneId?: string): Frame {
 /**
  * Deep copy SVG elements
  */
-export function deepCopyElements(elements: SVGElement[]): SVGElement[] {
+export function deepCopyElements(elements: (SVGElement | SVGElementModel)[]): (SVGElement | SVGElementModel)[] {
   return JSON.parse(JSON.stringify(elements));
 }
 

@@ -9,17 +9,28 @@ import { TimelineStateService } from '../../services/timeline-state.service';
 import { PlaybackService } from '../../services/playback.service';
 import { OnionSkinService } from '../../services/onion-skin.service';
 import { KeyboardShortcutService } from '../../services/keyboard-shortcut.service';
+import { DrawingShortcutsService } from '../../services/drawing-shortcuts.service';
 import { SceneManagerComponent } from '../scene-manager/scene-manager.component';
 import { TimelineContainerComponent } from '../timeline/timeline-container.component';
 import { CanvasComponent } from '../canvas/canvas.component';
 import { ButtonComponent } from '../shared/button/button.component';
+import { DrawingToolbarComponent } from '../shared/drawing-toolbar/drawing-toolbar.component';
+import { ColorPickerComponent } from '../shared/color-picker/color-picker.component';
 import { Frame } from '../../models/frame.model';
 import { Scene } from '../../models/scene.model';
 
 @Component({
   selector: 'app-project-workspace',
   standalone: true,
-  imports: [CommonModule, SceneManagerComponent, TimelineContainerComponent, CanvasComponent, ButtonComponent],
+  imports: [
+    CommonModule, 
+    SceneManagerComponent, 
+    TimelineContainerComponent, 
+    CanvasComponent, 
+    ButtonComponent,
+    DrawingToolbarComponent,
+    ColorPickerComponent
+  ],
   template: `
     <div class="workspace" *ngIf="project()">
       <header class="workspace-header">
@@ -49,6 +60,12 @@ import { Scene } from '../../models/scene.model';
       </header>
 
       <div class="workspace-content">
+        <!-- Drawing Tools Sidebar -->
+        <aside class="tools-sidebar">
+          <app-drawing-toolbar></app-drawing-toolbar>
+        </aside>
+
+        <!-- Scene Manager Sidebar -->
         <aside class="sidebar">
           <app-scene-manager 
             [projectId]="projectId()"
@@ -61,6 +78,8 @@ import { Scene } from '../../models/scene.model';
             @if (activeScene() && frames().length > 0) {
               <app-canvas
                 [currentFrame]="currentFrame()"
+                [projectId]="projectId()"
+                [sceneId]="activeScene()!.id"
                 [width]="canvasWidth()"
                 [height]="canvasHeight()"
                 [backgroundColor]="backgroundColor()">
@@ -79,6 +98,11 @@ import { Scene } from '../../models/scene.model';
           <!-- Timeline Component -->
           <app-timeline-container></app-timeline-container>
         </main>
+
+        <!-- Properties Sidebar -->
+        <aside class="properties-sidebar">
+          <app-color-picker></app-color-picker>
+        </aside>
       </div>
     </div>
 
@@ -183,10 +207,24 @@ import { Scene } from '../../models/scene.model';
       overflow: hidden;
     }
 
+    .tools-sidebar {
+      width: 220px;
+      background: #2a2a2a;
+      border-right: 1px solid #444;
+      overflow-y: auto;
+    }
+
     .sidebar {
       width: 300px;
       background: #2a2a2a;
       border-right: 1px solid #444;
+      overflow-y: auto;
+    }
+
+    .properties-sidebar {
+      width: 280px;
+      background: #2a2a2a;
+      border-left: 1px solid #444;
       overflow-y: auto;
     }
 
@@ -258,6 +296,7 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   private playbackService = inject(PlaybackService);
   private onionSkinService = inject(OnionSkinService);
   private keyboardShortcut = inject(KeyboardShortcutService);
+  private drawingShortcuts = inject(DrawingShortcutsService);
   public autoSaveService = inject(AutoSaveService);
 
   // Signals for state
@@ -298,6 +337,9 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
       this.projectService.setActiveProject(id);
       this.autoSaveService.startAutoSave();
       this.autoSaveService.setupBeforeUnloadHandler();
+
+      // Register drawing tool shortcuts
+      this.drawingShortcuts.registerShortcuts();
 
       // Load first scene if available
       const proj = this.project();

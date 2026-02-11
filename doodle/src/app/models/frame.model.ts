@@ -1,3 +1,6 @@
+import { SVGElementModel } from './svg-element.model';
+
+// Legacy SVGElement interface for backward compatibility
 export interface SVGElement {
   type: string;
   properties: Record<string, any>;
@@ -8,7 +11,7 @@ export interface Frame {
   sceneId: string;
   order: number;
   duration?: number;       // frame hold duration (default: 1)
-  elements: SVGElement[];  // drawing elements (expanded in Epic 3)
+  elements: (SVGElement | SVGElementModel)[];  // drawing elements (expanded in Epic 3)
   thumbnail?: string;      // base64 PNG thumbnail for timeline
   label?: string;          // optional frame label/marker
   notes?: string;          // frame-specific notes
@@ -32,7 +35,7 @@ export interface FrameUpdateDTO {
   notes?: string;
   locked?: boolean;
   visible?: boolean;
-  elements?: SVGElement[];
+  elements?: (SVGElement | SVGElementModel)[];
   thumbnail?: string;
 }
 

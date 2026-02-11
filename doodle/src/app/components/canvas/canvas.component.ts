@@ -1,7 +1,13 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, signal, effect, input, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, signal, effect, input, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Frame } from '../../models/frame.model';
 import { OnionSkinService } from '../../services/onion-skin.service';
+import { ToolService } from '../../services/tool.service';
+import { DrawingEngineService } from '../../services/drawing-engine.service';
+import { DrawingPropertiesService } from '../../services/drawing-properties.service';
+import { SVGElementModel, Point } from '../../models/svg-element.model';
+import { screenToCanvasCoordinates, svgElementToDOM } from '../../utils/svg-utils';
+import { FrameService } from '../../services/frame.service';
 
 @Component({
   selector: 'app-canvas',
@@ -12,7 +18,9 @@ import { OnionSkinService } from '../../services/onion-skin.service';
       <div class="canvas-viewport" 
            [style.transform]="'scale(' + zoom() + ') translate(' + panX() + 'px, ' + panY() + 'px)'"
            (wheel)="onWheel($event)"
-           (mousedown)="onMouseDown($event)">
+           (mousedown)="onMouseDown($event)"
+           (mouseleave)="onMouseLeave()"
+           [style.cursor]="toolService.getCursor()">
         <svg #canvas
              [attr.width]="width()"
              [attr.height]="height()"
@@ -24,7 +32,9 @@ import { OnionSkinService } from '../../services/onion-skin.service';
           @if (onionSkinEnabled()) {
             @for (prevFrame of previousFrames(); track prevFrame.id) {
               <g [attr.opacity]="previousOpacity()" class="onion-skin-previous">
-                <!-- Element rendering will be implemented in Epic 3 -->
+                @for (element of prevFrame.elements; track element) {
+                  <!-- Element rendering -->
+                }
               </g>
             }
           }
@@ -32,7 +42,128 @@ import { OnionSkinService } from '../../services/onion-skin.service';
           <!-- Current frame -->
           @if (currentFrame()) {
             <g class="current-frame">
-              <!-- Element rendering will be implemented in Epic 3 -->
+              @for (element of currentFrame()!.elements; track element) {
+                <!-- Render SVG elements from frame -->
+                @if (element.type === 'rect') {
+                  <rect
+                    [attr.x]="getAttr(element, 'x')"
+                    [attr.y]="getAttr(element, 'y')"
+                    [attr.width]="getAttr(element, 'width')"
+                    [attr.height]="getAttr(element, 'height')"
+                    [attr.fill]="getAttr(element, 'fill')"
+                    [attr.stroke]="getAttr(element, 'stroke')"
+                    [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                  />
+                }
+                @if (element.type === 'circle') {
+                  <circle
+                    [attr.cx]="getAttr(element, 'cx')"
+                    [attr.cy]="getAttr(element, 'cy')"
+                    [attr.r]="getAttr(element, 'r')"
+                    [attr.fill]="getAttr(element, 'fill')"
+                    [attr.stroke]="getAttr(element, 'stroke')"
+                    [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                  />
+                }
+                @if (element.type === 'ellipse') {
+                  <ellipse
+                    [attr.cx]="getAttr(element, 'cx')"
+                    [attr.cy]="getAttr(element, 'cy')"
+                    [attr.rx]="getAttr(element, 'rx')"
+                    [attr.ry]="getAttr(element, 'ry')"
+                    [attr.fill]="getAttr(element, 'fill')"
+                    [attr.stroke]="getAttr(element, 'stroke')"
+                    [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                  />
+                }
+                @if (element.type === 'line') {
+                  <line
+                    [attr.x1]="getAttr(element, 'x1')"
+                    [attr.y1]="getAttr(element, 'y1')"
+                    [attr.x2]="getAttr(element, 'x2')"
+                    [attr.y2]="getAttr(element, 'y2')"
+                    [attr.stroke]="getAttr(element, 'stroke')"
+                    [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                  />
+                }
+                @if (element.type === 'polygon') {
+                  <polygon
+                    [attr.points]="getAttr(element, 'points')"
+                    [attr.fill]="getAttr(element, 'fill')"
+                    [attr.stroke]="getAttr(element, 'stroke')"
+                    [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                  />
+                }
+                @if (element.type === 'path') {
+                  <path
+                    [attr.d]="getAttr(element, 'd')"
+                    [attr.fill]="getAttr(element, 'fill')"
+                    [attr.stroke]="getAttr(element, 'stroke')"
+                    [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                  />
+                }
+              }
+            </g>
+          }
+
+          <!-- Preview element during drawing -->
+          @if (previewElement(); as preview) {
+            <g class="preview-element" opacity="0.7">
+              @if (preview.type === 'rect') {
+                <rect
+                  [attr.x]="preview.attributes.x"
+                  [attr.y]="preview.attributes.y"
+                  [attr.width]="preview.attributes.width"
+                  [attr.height]="preview.attributes.height"
+                  [attr.fill]="preview.attributes.fill"
+                  [attr.stroke]="preview.attributes.stroke || '#000'"
+                  [attr.stroke-width]="preview.attributes.strokeWidth"
+                  stroke-dasharray="4 2"
+                />
+              }
+              @if (preview.type === 'circle') {
+                <circle
+                  [attr.cx]="preview.attributes.cx"
+                  [attr.cy]="preview.attributes.cy"
+                  [attr.r]="preview.attributes.r"
+                  [attr.fill]="preview.attributes.fill"
+                  [attr.stroke]="preview.attributes.stroke || '#000'"
+                  [attr.stroke-width]="preview.attributes.strokeWidth"
+                  stroke-dasharray="4 2"
+                />
+              }
+              @if (preview.type === 'ellipse') {
+                <ellipse
+                  [attr.cx]="preview.attributes.cx"
+                  [attr.cy]="preview.attributes.cy"
+                  [attr.rx]="preview.attributes.rx"
+                  [attr.ry]="preview.attributes.ry"
+                  [attr.fill]="preview.attributes.fill"
+                  [attr.stroke]="preview.attributes.stroke || '#000'"
+                  [attr.stroke-width]="preview.attributes.strokeWidth"
+                  stroke-dasharray="4 2"
+                />
+              }
+              @if (preview.type === 'line') {
+                <line
+                  [attr.x1]="preview.attributes.x1"
+                  [attr.y1]="preview.attributes.y1"
+                  [attr.x2]="preview.attributes.x2"
+                  [attr.y2]="preview.attributes.y2"
+                  [attr.stroke]="preview.attributes.stroke || '#000'"
+                  [attr.stroke-width]="preview.attributes.strokeWidth"
+                  stroke-dasharray="4 2"
+                />
+              }
+              @if (preview.type === 'polygon') {
+                <polygon
+                  [attr.points]="preview.attributes.points"
+                  [attr.fill]="preview.attributes.fill"
+                  [attr.stroke]="preview.attributes.stroke || '#000'"
+                  [attr.stroke-width]="preview.attributes.strokeWidth"
+                  stroke-dasharray="4 2"
+                />
+              }
             </g>
           }
 
@@ -162,9 +293,15 @@ export class CanvasComponent implements OnInit, OnDestroy {
   @ViewChild('container', { static: true }) containerRef!: ElementRef<HTMLDivElement>;
 
   private onionSkinService = inject(OnionSkinService);
+  protected toolService = inject(ToolService);
+  private drawingEngine = inject(DrawingEngineService);
+  private drawingPropertiesService = inject(DrawingPropertiesService);
+  private frameService = inject(FrameService);
 
   // Inputs
   currentFrame = input<Frame | null>(null);
+  projectId = input<string>('');
+  sceneId = input<string>('');
   width = input(1920);
   height = input(1080);
   backgroundColor = input('#ffffff');
@@ -186,6 +323,10 @@ export class CanvasComponent implements OnInit, OnDestroy {
   private isPanning = false;
   private lastPanX = 0;
   private lastPanY = 0;
+
+  // Drawing state
+  protected previewElement = signal<SVGElementModel | null>(null);
+  protected activeTool = this.toolService.activeTool;
 
   constructor() {
     // React to current frame changes
@@ -214,11 +355,43 @@ export class CanvasComponent implements OnInit, OnDestroy {
   }
 
   protected onMouseDown(event: MouseEvent): void {
-    if (event.button === 1 || event.shiftKey) { // Middle mouse or Shift+Left
+    // Pan tool or middle mouse button
+    if (this.activeTool() === 'pan' || event.button === 1 || event.shiftKey) {
       event.preventDefault();
       this.isPanning = true;
       this.lastPanX = event.clientX;
       this.lastPanY = event.clientY;
+      return;
+    }
+
+    // Drawing tools
+    if (this.isDrawingTool() && event.button === 0) {
+      event.preventDefault();
+      this.startDrawing(event);
+    }
+  }
+
+  private startDrawing(event: MouseEvent): void {
+    const point = this.getCanvasPoint(event);
+    this.toolService.startDrawing(point);
+
+    // Create initial preview element
+    const properties = this.drawingPropertiesService.properties();
+    const options = {
+      constrainProportions: event.shiftKey,
+      drawFromCenter: event.altKey
+    };
+
+    const element = this.drawingEngine.drawShape(
+      this.activeTool(),
+      point,
+      point,
+      properties,
+      options
+    );
+
+    if (element) {
+      this.previewElement.set(element);
     }
   }
 
@@ -262,12 +435,76 @@ export class CanvasComponent implements OnInit, OnDestroy {
       
       this.lastPanX = event.clientX;
       this.lastPanY = event.clientY;
+      return;
+    }
+
+    // Drawing in progress
+    if (this.toolService.isDrawing()) {
+      const point = this.getCanvasPoint(event);
+      this.toolService.continueDrawing(point);
+      this.updatePreview(event);
     }
   };
 
-  private onMouseUp = (): void => {
-    this.isPanning = false;
+  private updatePreview(event: MouseEvent): void {
+    const toolState = this.toolService.toolState();
+    if (!toolState.startPoint || !toolState.currentPoint) return;
+
+    const properties = this.drawingPropertiesService.properties();
+    const options = {
+      constrainProportions: event.shiftKey,
+      drawFromCenter: event.altKey
+    };
+
+    const element = this.drawingEngine.drawShape(
+      this.activeTool(),
+      toolState.startPoint,
+      toolState.currentPoint,
+      properties,
+      options
+    );
+
+    if (element) {
+      this.previewElement.set(element);
+    }
+  }
+
+  private onMouseUp = (event: MouseEvent): void => {
+    if (this.isPanning) {
+      this.isPanning = false;
+      return;
+    }
+
+    // Finalize drawing
+    if (this.toolService.isDrawing()) {
+      const point = this.getCanvasPoint(event);
+      this.toolService.endDrawing(point);
+      this.finalizeDrawing();
+    }
   };
+
+  private finalizeDrawing(): void {
+    const preview = this.previewElement();
+    const frame = this.currentFrame();
+    const projId = this.projectId();
+    const scnId = this.sceneId();
+
+    if (preview && frame && projId && scnId) {
+      // Add the element to the frame
+      const updatedElements = [...frame.elements, preview];
+      try {
+        this.frameService.updateFrame(projId, scnId, frame.id, { 
+          elements: updatedElements as any[]
+        });
+      } catch (error) {
+        console.error('Failed to update frame:', error);
+      }
+    }
+
+    // Clear preview
+    this.previewElement.set(null);
+    this.toolService.cancelDrawing();
+  }
 
   private renderFrame(frame: Frame): void {
     // Frame rendering will be implemented with drawing tools in Epic 3
@@ -281,5 +518,51 @@ export class CanvasComponent implements OnInit, OnDestroy {
   updateOnionSkin(previous: Frame[], next: Frame[]): void {
     this.previousFrames.set(previous);
     this.nextFrames.set(next);
+  }
+
+  /**
+   * Get canvas coordinates from mouse event
+   */
+  private getCanvasPoint(event: MouseEvent): Point {
+    const canvas = this.canvasRef.nativeElement;
+    const rect = canvas.getBoundingClientRect();
+    return screenToCanvasCoordinates(
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+      canvas
+    );
+  }
+
+  /**
+   * Check if current tool is a drawing tool
+   */
+  private isDrawingTool(): boolean {
+    const tool = this.activeTool();
+    return ['rectangle', 'circle', 'ellipse', 'line', 'polygon', 'star', 'triangle'].includes(tool);
+  }
+
+  /**
+   * Handle mouse leave (cancel drawing if in progress)
+   */
+  protected onMouseLeave(): void {
+    if (this.toolService.isDrawing()) {
+      this.toolService.cancelDrawing();
+      this.previewElement.set(null);
+    }
+  }
+
+  /**
+   * Get attribute from element (handles both legacy and new format)
+   */
+  protected getAttr(element: any, key: string): any {
+    // New SVGElementModel format
+    if (element.attributes) {
+      return element.attributes[key];
+    }
+    // Legacy SVGElement format
+    if (element.properties) {
+      return element.properties[key];
+    }
+    return undefined;
   }
 }

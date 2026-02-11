@@ -229,12 +229,18 @@ export class SceneService {
       return null;
     }
 
+    const now = new Date();
     const frame: Frame = {
       id: this.generateUUID(),
       sceneId,
       order: frameData?.order !== undefined ? frameData.order : scene.frames.length,
+      duration: 1,
       elements: frameData?.elements || [],
-      thumbnail: frameData?.thumbnail
+      thumbnail: frameData?.thumbnail,
+      locked: false,
+      visible: true,
+      createdAt: now,
+      updatedAt: now
     };
 
     scene.frames.push(frame);

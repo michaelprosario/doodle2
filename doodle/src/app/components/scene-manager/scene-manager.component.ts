@@ -1,4 +1,4 @@
-import { Component, Input, inject, signal, computed } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { SceneService } from '../../services/scene.service';
@@ -108,6 +108,7 @@ import { NotificationService } from '../../services/notification.service';
 })
 export class SceneManagerComponent {
   @Input({ required: true }) projectId!: string;
+  @Output() sceneSelect = new EventEmitter<Scene>();
 
   private sceneService = inject(SceneService);
   private notificationService = inject(NotificationService);
@@ -147,7 +148,7 @@ export class SceneManagerComponent {
 
   onSelectScene(scene: Scene): void {
     this.activeSceneId.set(scene.id);
-    // TODO: Load scene in canvas
+    this.sceneSelect.emit(scene);
   }
 
   onEditScene(scene: Scene): void {

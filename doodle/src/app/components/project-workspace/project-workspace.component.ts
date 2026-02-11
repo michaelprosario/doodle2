@@ -1,16 +1,25 @@
-import { Component, inject, OnInit, OnDestroy, computed } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, computed, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ProjectService } from '../../services/project.service';
 import { SceneService } from '../../services/scene.service';
 import { AutoSaveService } from '../../services/auto-save.service';
+import { FrameService } from '../../services/frame.service';
+import { TimelineStateService } from '../../services/timeline-state.service';
+import { PlaybackService } from '../../services/playback.service';
+import { OnionSkinService } from '../../services/onion-skin.service';
+import { KeyboardShortcutService } from '../../services/keyboard-shortcut.service';
 import { SceneManagerComponent } from '../scene-manager/scene-manager.component';
+import { TimelineContainerComponent } from '../timeline/timeline-container.component';
+import { CanvasComponent } from '../canvas/canvas.component';
 import { ButtonComponent } from '../shared/button/button.component';
+import { Frame } from '../../models/frame.model';
+import { Scene } from '../../models/scene.model';
 
 @Component({
   selector: 'app-project-workspace',
   standalone: true,
-  imports: [CommonModule, SceneManagerComponent, ButtonComponent],
+  imports: [CommonModule, SceneManagerComponent, TimelineContainerComponent, CanvasComponent, ButtonComponent],
   template: `
     <div class="workspace" *ngIf="project()">
       <header class="workspace-header">
@@ -19,8 +28,19 @@ import { ButtonComponent } from '../shared/button/button.component';
             ← Back to Dashboard
           </button>
           <h1>{{ project()?.name }}</h1>
+          <span class="scene-name" *ngIf="activeScene()">• {{ activeScene()?.name }}</span>
+        </div>
+        <div class="header-center">
+          <!-- Tools will be added in Epic 3 -->
         </div>
         <div class="header-right">
+          <button 
+            class="onion-skin-btn"
+            [class.active]="onionSkinEnabled()"
+            (click)="toggleOnionSkin()"
+            title="Toggle Onion Skin (O)">
+            👻 Onion Skin
+          </button>
           <span class="save-status">{{ autoSaveService.getSaveStatusText() }}</span>
           <app-button size="small" (click)="manualSave()">
             Save
@@ -30,16 +50,34 @@ import { ButtonComponent } from '../shared/button/button.component';
 
       <div class="workspace-content">
         <aside class="sidebar">
-          <app-scene-manager [projectId]="projectId()"></app-scene-manager>
+          <app-scene-manager 
+            [projectId]="projectId()"
+            (sceneSelect)="onSceneSelect($event)">
+          </app-scene-manager>
         </aside>
 
         <main class="main-content">
           <div class="canvas-area">
-            <div class="canvas-placeholder">
-              <h2>Canvas Area</h2>
-              <p>Frame editing will be implemented in Epic 2</p>
-            </div>
+            @if (activeScene() && frames().length > 0) {
+              <app-canvas
+                [currentFrame]="currentFrame()"
+                [width]="canvasWidth()"
+                [height]="canvasHeight()"
+                [backgroundColor]="backgroundColor()">
+              </app-canvas>
+            } @else {
+              <div class="canvas-placeholder">
+                <h2>No Frames</h2>
+                <p>Create your first frame to start animating</p>
+                <app-button (click)="createFirstFrame()">
+                  Create First Frame
+                </app-button>
+              </div>
+            }
           </div>
+
+          <!-- Timeline Component -->
+          <app-timeline-container></app-timeline-container>
         </main>
       </div>
     </div>
@@ -56,54 +94,87 @@ import { ButtonComponent } from '../shared/button/button.component';
       height: 100vh;
       display: flex;
       flex-direction: column;
-      background: #f9fafb;
+      background: #1a1a1a;
+      color: #fff;
     }
 
     .workspace-header {
-      background: white;
-      border-bottom: 1px solid #e5e7eb;
-      padding: 1rem 1.5rem;
+      background: #2a2a2a;
+      border-bottom: 1px solid #444;
+      padding: 0.75rem 1.5rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 1rem;
     }
 
-    .header-left {
+    .header-left, .header-center, .header-right {
       display: flex;
       align-items: center;
       gap: 1rem;
     }
 
-    .back-button {
+    .header-left {
+      flex: 1;
+    }
+
+    .header-center {
+      flex: 2;
+      justify-content: center;
+    }
+
+    .header-right {
+      flex: 1;
+      justify-content: flex-end;
+    }back-button {
       background: none;
-      border: none;
-      color: #6b7280;
+      border: 1px solid #555;
+      color: #fff;
       cursor: pointer;
       font-size: 0.875rem;
-      padding: 0.5rem;
+      padding: 0.5rem 1rem;
       border-radius: 0.25rem;
-      transition: background 0.2s;
+      transition: all 0.2s;
     }
 
     .back-button:hover {
-      background: #f3f4f6;
+      background: #333;
     }
 
     .workspace-header h1 {
       margin: 0;
-      font-size: 1.25rem;
+      font-size: 1.125rem;
       font-weight: 600;
     }
 
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
+    .scene-name {
+      color: #999;
+      font-size: 0.875rem;
+    }
+
+    .onion-skin-btn {
+      background: #333;
+      border: 1px solid #555;
+      color: #fff;
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .onion-skin-btn:hover {
+      background: #444;
+    }
+
+    .onion-skin-btn.active {
+      background: #4a9eff;
+      border-color: #4a9eff;
     }
 
     .save-status {
       font-size: 0.875rem;
-      color: #6b7280;
+      color: #999;
     }
 
     .workspace-content {
@@ -114,8 +185,8 @@ import { ButtonComponent } from '../shared/button/button.component';
 
     .sidebar {
       width: 300px;
-      background: white;
-      border-right: 1px solid #e5e7eb;
+      background: #2a2a2a;
+      border-right: 1px solid #444;
       overflow-y: auto;
     }
 
@@ -131,17 +202,23 @@ import { ButtonComponent } from '../shared/button/button.component';
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem;
+      background: #1a1a1a;
+      overflow: hidden;
     }
 
     .canvas-placeholder {
       text-align: center;
-      color: #6b7280;
+      color: #999;
     }
 
     .canvas-placeholder h2 {
       font-size: 1.5rem;
       margin-bottom: 0.5rem;
+      color: #ccc;
+    }
+
+    .canvas-placeholder p {
+      margin-bottom: 1rem;
     }
 
     .error-state {
@@ -151,6 +228,8 @@ import { ButtonComponent } from '../shared/button/button.component';
       align-items: center;
       justify-content: center;
       gap: 1rem;
+      background: #1a1a1a;
+      color: #fff;
     }
 
     @media (max-width: 768px) {
@@ -162,6 +241,10 @@ import { ButtonComponent } from '../shared/button/button.component';
         width: 100%;
         max-height: 200px;
       }
+
+      .header-left, .header-center, .header-right {
+        flex: none;
+      }
     }
   `]
 })
@@ -169,7 +252,17 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private projectService = inject(ProjectService);
+  private sceneService = inject(SceneService);
+  private frameService = inject(FrameService);
+  private timelineState = inject(TimelineStateService);
+  private playbackService = inject(PlaybackService);
+  private onionSkinService = inject(OnionSkinService);
+  private keyboardShortcut = inject(KeyboardShortcutService);
   public autoSaveService = inject(AutoSaveService);
+
+  // Signals for state
+  activeScene = signal<Scene | null>(null);
+  frames = signal<Frame[]>([]);
 
   projectId = computed(() => {
     const id = this.route.snapshot.paramMap.get('id');
@@ -181,12 +274,36 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
     return id ? this.projectService.getProject(id) : null;
   });
 
+  currentFrameIndex = this.timelineState.currentFrameIndex;
+  onionSkinEnabled = this.onionSkinService.enabled;
+
+  currentFrame = computed(() => {
+    const frames = this.frames();
+    const index = this.currentFrameIndex();
+    return frames[index] || null;
+  });
+
+  canvasWidth = computed(() => this.project()?.dimensions.width || 1920);
+  canvasHeight = computed(() => this.project()?.dimensions.height || 1080);
+  backgroundColor = computed(() => this.project()?.backgroundColor || '#ffffff');
+
+  constructor() {
+    // Setup keyboard shortcuts
+    this.setupKeyboardShortcuts();
+  }
+
   ngOnInit(): void {
     const id = this.projectId();
     if (id) {
       this.projectService.setActiveProject(id);
       this.autoSaveService.startAutoSave();
       this.autoSaveService.setupBeforeUnloadHandler();
+
+      // Load first scene if available
+      const proj = this.project();
+      if (proj && proj.scenes && proj.scenes.length > 0) {
+        this.selectScene(proj.scenes[0]);
+      }
     }
   }
 
@@ -200,5 +317,76 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
 
   manualSave(): void {
     this.autoSaveService.save();
+  }
+
+  onSceneSelect(scene: Scene): void {
+    this.selectScene(scene);
+  }
+
+  private selectScene(scene: Scene): void {
+    this.activeScene.set(scene);
+    const sceneFrames = scene.frames || [];
+    this.frames.set(sceneFrames);
+    this.timelineState.initialize(sceneFrames.length);
+    this.timelineState.setTotalFrames(sceneFrames.length);
+  }
+
+  createFirstFrame(): void {
+    const scene = this.activeScene();
+    const proj = this.project();
+    if (!scene || !proj) return;
+
+    try {
+      const newFrame = this.frameService.createFrame(proj.id, scene.id);
+      this.frames.update(frames => [...frames, newFrame]);
+      this.timelineState.setTotalFrames(this.frames().length);
+    } catch (error) {
+      console.error('Failed to create frame:', error);
+    }
+  }
+
+  toggleOnionSkin(): void {
+    this.onionSkinService.toggleOnionSkin();
+  }
+
+  private setupKeyboardShortcuts(): void {
+    // Frame navigation
+    this.keyboardShortcut.register({
+      key: ',',
+      callback: () => this.timelineState.previousFrame(),
+      description: 'Previous frame'
+    });
+
+    this.keyboardShortcut.register({
+      key: '.',
+      callback: () => this.timelineState.nextFrame(),
+      description: 'Next frame'
+    });
+
+    this.keyboardShortcut.register({
+      key: 'Home',
+      callback: () => this.timelineState.firstFrame(),
+      description: 'First frame'
+    });
+
+    this.keyboardShortcut.register({
+      key: 'End',
+      callback: () => this.timelineState.lastFrame(),
+      description: 'Last frame'
+    });
+
+    // Playback
+    this.keyboardShortcut.register({
+      key: ' ',
+      callback: () => this.playbackService.togglePlayPause(),
+      description: 'Play/Pause'
+    });
+
+    // Onion skin
+    this.keyboardShortcut.register({
+      key: 'o',
+      callback: () => this.onionSkinService.toggleOnionSkin(),
+      description: 'Toggle onion skin'
+    });
   }
 }

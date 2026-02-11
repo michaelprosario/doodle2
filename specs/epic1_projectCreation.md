@@ -1,4 +1,0 @@
-- read specs/epic1_projectCreation.md
-- Think about the approach for epic 1 and Project Creation & Management
-- Think about implementing in the angular project doodle
-- Document in epic1_projectCreation_tasks1.md

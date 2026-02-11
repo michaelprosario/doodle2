@@ -164,6 +164,17 @@ import { FrameService } from '../../services/frame.service';
                   stroke-dasharray="4 2"
                 />
               }
+              @if (preview.type === 'path') {
+                <path
+                  [attr.d]="preview.attributes.d"
+                  [attr.fill]="preview.attributes.fill || 'none'"
+                  [attr.stroke]="preview.attributes.stroke || '#000'"
+                  [attr.stroke-width]="preview.attributes.strokeWidth"
+                  [attr.stroke-linecap]="preview.attributes.strokeLinecap"
+                  [attr.stroke-linejoin]="preview.attributes.strokeLinejoin"
+                  stroke-dasharray="4 2"
+                />
+              }
             </g>
           }
 
@@ -306,6 +317,9 @@ export class CanvasComponent implements OnInit, OnDestroy {
   height = input(1080);
   backgroundColor = input('#ffffff');
 
+  // Outputs
+  frameUpdated = output<void>();
+
   // Signals
   protected zoom = signal(1.0);
   protected panX = signal(0);
@@ -355,6 +369,8 @@ export class CanvasComponent implements OnInit, OnDestroy {
   }
 
   protected onMouseDown(event: MouseEvent): void {
+    console.log('Mouse down - activeTool:', this.activeTool(), 'button:', event.button);
+    
     // Pan tool or middle mouse button
     if (this.activeTool() === 'pan' || event.button === 1 || event.shiftKey) {
       event.preventDefault();
@@ -366,6 +382,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
 
     // Drawing tools
     if (this.isDrawingTool() && event.button === 0) {
+      console.log('Starting drawing with tool:', this.activeTool());
       event.preventDefault();
       this.startDrawing(event);
     }
@@ -375,7 +392,14 @@ export class CanvasComponent implements OnInit, OnDestroy {
     const point = this.getCanvasPoint(event);
     this.toolService.startDrawing(point);
 
-    // Create initial preview element
+    // For freehand tools, initialize path points
+    if (this.isFreehandTool()) {
+      this.toolService.clearPathPoints();
+      this.toolService.addPathPoint(point);
+      return;
+    }
+
+    // Create initial preview element for shape tools
     const properties = this.drawingPropertiesService.properties();
     const options = {
       constrainProportions: event.shiftKey,
@@ -442,7 +466,14 @@ export class CanvasComponent implements OnInit, OnDestroy {
     if (this.toolService.isDrawing()) {
       const point = this.getCanvasPoint(event);
       this.toolService.continueDrawing(point);
-      this.updatePreview(event);
+      
+      // Handle freehand drawing
+      if (this.isFreehandTool()) {
+        this.toolService.addPathPoint(point);
+        this.updateFreehandPreview();
+      } else {
+        this.updatePreview(event);
+      }
     }
   };
 
@@ -469,6 +500,24 @@ export class CanvasComponent implements OnInit, OnDestroy {
     }
   }
 
+  private updateFreehandPreview(): void {
+    const pathPoints = this.toolService.getPathPoints();
+    if (pathPoints.length < 2) return;
+
+    const properties = this.drawingPropertiesService.properties();
+    const attrs = {
+      fill: 'none', // Freehand paths should not have fill
+      stroke: properties.stroke,
+      strokeWidth: properties.strokeWidth,
+      strokeOpacity: properties.strokeOpacity,
+      strokeLinecap: properties.strokeLinecap,
+      strokeLinejoin: properties.strokeLinejoin
+    };
+
+    const element = this.drawingEngine.createPathFromPoints(pathPoints, attrs);
+    this.previewElement.set(element);
+  }
+
   private onMouseUp = (event: MouseEvent): void => {
     if (this.isPanning) {
       this.isPanning = false;
@@ -478,6 +527,12 @@ export class CanvasComponent implements OnInit, OnDestroy {
     // Finalize drawing
     if (this.toolService.isDrawing()) {
       const point = this.getCanvasPoint(event);
+      
+      // Add final point for freehand tools
+      if (this.isFreehandTool()) {
+        this.toolService.addPathPoint(point);
+      }
+      
       this.toolService.endDrawing(point);
       this.finalizeDrawing();
     }
@@ -489,21 +544,56 @@ export class CanvasComponent implements OnInit, OnDestroy {
     const projId = this.projectId();
     const scnId = this.sceneId();
 
+    console.log('Finalizing drawing:', {
+      hasPreview: !!preview,
+      hasFrame: !!frame,
+      frameId: frame?.id,
+      projId,
+      scnId,
+      elementCount: frame?.elements?.length
+    });
+
+    // For freehand tools, ensure we have enough points
+    if (this.isFreehandTool()) {
+      const pathPoints = this.toolService.getPathPoints();
+      console.log('Freehand tool - path points:', pathPoints.length);
+      if (pathPoints.length < 2) {
+        // Not enough points to create a path
+        console.warn('Not enough points for freehand drawing');
+        this.previewElement.set(null);
+        this.toolService.cancelDrawing();
+        this.toolService.clearPathPoints();
+        return;
+      }
+    }
+
     if (preview && frame && projId && scnId) {
       // Add the element to the frame
       const updatedElements = [...frame.elements, preview];
+      console.log('Updating frame with new element:', preview.type, 'Total elements:', updatedElements.length);
       try {
         this.frameService.updateFrame(projId, scnId, frame.id, { 
           elements: updatedElements as any[]
         });
+        console.log('Frame updated successfully, emitting event');
+        // Emit event to parent to refresh frames
+        this.frameUpdated.emit();
       } catch (error) {
         console.error('Failed to update frame:', error);
       }
+    } else {
+      console.warn('Cannot finalize drawing - missing required data:', {
+        preview: !!preview,
+        frame: !!frame,
+        projId: !!projId,
+        scnId: !!scnId
+      });
     }
 
-    // Clear preview
+    // Clear preview and path points
     this.previewElement.set(null);
     this.toolService.cancelDrawing();
+    this.toolService.clearPathPoints();
   }
 
   private renderFrame(frame: Frame): void {
@@ -538,7 +628,15 @@ export class CanvasComponent implements OnInit, OnDestroy {
    */
   private isDrawingTool(): boolean {
     const tool = this.activeTool();
-    return ['rectangle', 'circle', 'ellipse', 'line', 'polygon', 'star', 'triangle'].includes(tool);
+    return ['rectangle', 'circle', 'ellipse', 'line', 'polygon', 'star', 'triangle', 'pen', 'pencil'].includes(tool);
+  }
+
+  /**
+   * Check if current tool is a freehand tool (pen/pencil)
+   */
+  private isFreehandTool(): boolean {
+    const tool = this.activeTool();
+    return ['pen', 'pencil'].includes(tool);
   }
 
   /**
@@ -547,6 +645,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
   protected onMouseLeave(): void {
     if (this.toolService.isDrawing()) {
       this.toolService.cancelDrawing();
+      this.toolService.clearPathPoints();
       this.previewElement.set(null);
     }
   }

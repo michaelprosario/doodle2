@@ -379,17 +379,22 @@ export class TimelineContainerComponent implements OnInit, OnDestroy {
     const projId = this.projectId();
     const scnId = this.sceneId();
     
+    console.log('[Timeline] addFrame called:', { projId, scnId });
+    
     if (!projId || !scnId) {
       this.notificationService.error('No scene selected');
       return;
     }
 
     try {
+      console.log('[Timeline] Creating frame...');
       this.frameService.createFrame(projId, scnId);
+      console.log('[Timeline] Frame created, emitting framesChanged event');
       this.notificationService.success('Frame added');
       this.framesChanged.emit();
+      console.log('[Timeline] framesChanged event emitted');
     } catch (error) {
-      console.error('Failed to add frame:', error);
+      console.error('[Timeline] Failed to add frame:', error);
       this.notificationService.error('Failed to add frame');
     }
   }

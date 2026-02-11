@@ -26,3 +26,6 @@ Enable me to add a frame properly to a scene.
 ====
 
 As a user, I should be able to draw on the canvas using a pen tool.  At present, no drawing tools seem to work.
+
+====
+drawing on canvas do not work.

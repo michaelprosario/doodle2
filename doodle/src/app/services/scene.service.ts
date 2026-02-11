@@ -69,15 +69,16 @@ export class SceneService {
    * Update a scene
    */
   updateScene(projectId: string, sceneId: string, data: Partial<Scene>): void {
+    console.log('[SceneService] updateScene called:', { projectId, sceneId, dataKeys: Object.keys(data) });
     const project = this.projectService.getProject(projectId);
     if (!project) {
-      console.error(`Project with id "${projectId}" not found`);
+      console.error(`[SceneService] Project with id "${projectId}" not found`);
       return;
     }
 
     const sceneIndex = project.scenes.findIndex(s => s.id === sceneId);
     if (sceneIndex === -1) {
-      console.error(`Scene with id "${sceneId}" not found`);
+      console.error(`[SceneService] Scene with id "${sceneId}" not found`);
       return;
     }
 
@@ -89,9 +90,12 @@ export class SceneService {
       updatedAt: new Date()
     };
 
+    console.log('[SceneService] Updated scene frames:', updatedScene.frames?.length);
     project.scenes[sceneIndex] = updatedScene;
     project.updatedAt = new Date();
+    console.log('[SceneService] Saving project...');
     this.projectService.saveProject(project);
+    console.log('[SceneService] Project saved');
   }
 
   /**

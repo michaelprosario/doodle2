@@ -17,11 +17,14 @@ export class FrameService {
    * Create a new frame in a scene
    */
   createFrame(projectId: string, sceneId: string, data?: Partial<FrameCreateDTO>): Frame {
+    console.log('[FrameService] createFrame called:', { projectId, sceneId });
     const scene = this.sceneService.getScene(projectId, sceneId);
     if (!scene) {
+      console.error('[FrameService] Scene not found!');
       throw new Error(`Scene with id ${sceneId} not found`);
     }
 
+    console.log('[FrameService] Current scene frames:', scene.frames.length);
     const order = data?.order ?? scene.frames.length;
     const now = new Date();
 
@@ -39,9 +42,12 @@ export class FrameService {
       updatedAt: now
     };
 
+    console.log('[FrameService] Created new frame:', newFrame.id);
     scene.frames.push(newFrame);
     scene.frames.sort((a, b) => a.order - b.order);
+    console.log('[FrameService] Updating scene with', scene.frames.length, 'frames');
     this.sceneService.updateScene(projectId, sceneId, { frames: scene.frames });
+    console.log('[FrameService] Scene updated');
 
     return newFrame;
   }

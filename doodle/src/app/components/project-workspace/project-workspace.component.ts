@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, OnDestroy, computed, signal, effect } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, computed, signal, effect, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ProjectService } from '../../services/project.service';
@@ -77,12 +77,14 @@ import { Scene } from '../../models/scene.model';
           <div class="canvas-area">
             @if (activeScene() && frames().length > 0) {
               <app-canvas
+                #canvasComponent
                 [currentFrame]="currentFrame()"
                 [projectId]="projectId()"
                 [sceneId]="activeScene()!.id"
                 [width]="canvasWidth()"
                 [height]="canvasHeight()"
-                [backgroundColor]="backgroundColor()">
+                [backgroundColor]="backgroundColor()"
+                (frameUpdated)="refreshFrames()">
               </app-canvas>
             } @else {
               <div class="canvas-placeholder">
@@ -304,6 +306,8 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   private drawingShortcuts = inject(DrawingShortcutsService);
   public autoSaveService = inject(AutoSaveService);
 
+  @ViewChild('canvasComponent') canvasComponent?: CanvasComponent;
+
   // Signals for state
   activeScene = signal<Scene | null>(null);
   frames = signal<Frame[]>([]);
@@ -371,32 +375,58 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private selectScene(scene: Scene): void {
+    console.log('[Workspace] selectScene called:', scene.id, 'frames:', scene.frames.length);
     this.activeScene.set(scene);
     const sceneFrames = scene.frames || [];
+    console.log('[Workspace] Setting frames signal with', sceneFrames.length, 'frames');
     this.frames.set(sceneFrames);
     this.timelineState.initialize(sceneFrames.length);
     this.timelineState.setTotalFrames(sceneFrames.length);
+    console.log('[Workspace] Scene selected, current frame index:', this.currentFrameIndex());
   }
 
   createFirstFrame(): void {
     const scene = this.activeScene();
     const proj = this.project();
+    console.log('[Workspace] createFirstFrame called:', { hasScene: !!scene, hasProj: !!proj });
+    
     if (!scene || !proj) return;
 
     try {
+      console.log('[Workspace] Creating first frame for scene:', scene.id);
       const newFrame = this.frameService.createFrame(proj.id, scene.id);
-      this.frames.update(frames => [...frames, newFrame]);
-      this.timelineState.setTotalFrames(this.frames().length);
+      console.log('[Workspace] First frame created:', newFrame.id);
+      // Refresh frames from storage to get the updated scene
+      this.refreshFrames();
+      console.log('[Workspace] Frames refreshed, total:', this.frames().length);
     } catch (error) {
-      console.error('Failed to create frame:', error);
+      console.error('[Workspace] Failed to create frame:', error);
     }
   }
 
   onFramesChanged(): void {
     // Reload frames from the scene
+    this.refreshFrames();
+  }
+
+  /**
+   * Refresh frames from storage (called after frame updates)
+   */
+  refreshFrames(): void {
     const scene = this.activeScene();
-    if (scene) {
-      this.selectScene(scene);
+    const proj = this.project();
+    console.log('refreshFrames called:', { hasScene: !!scene, hasProj: !!proj });
+    
+    if (!scene || !proj) return;
+
+    // Reload the scene to get updated frames
+    const updatedScene = this.sceneService.getScene(proj.id, scene.id);
+    if (updatedScene) {
+      console.log('Reloaded scene with frames:', updatedScene.frames.length);
+      this.frames.set([...updatedScene.frames]);
+      this.timelineState.setTotalFrames(updatedScene.frames.length);
+    } else {
+      console.warn('Could not reload scene');
     }
   }
 

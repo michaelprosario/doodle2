@@ -163,14 +163,18 @@ export class ProjectService {
    * Save a project (update if exists, create if not)
    */
   saveProject(project: Project): void {
+    console.log('[ProjectService] saveProject called:', project.id);
     const existing = this.getProject(project.id);
     if (existing) {
+      console.log('[ProjectService] Updating existing project');
       this.updateProject(project.id, project);
     } else {
+      console.log('[ProjectService] Creating new project');
       const projects = this.projectsSignal();
       this.projectsSignal.set([...projects, project]);
       this.saveProjects();
     }
+    console.log('[ProjectService] saveProject complete');
   }
 
   /**

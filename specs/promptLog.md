@@ -38,3 +38,15 @@ drawing on canvas do not work.
 - outline major services
 - outline major components
 - document in techDesign.md
+
+
+====
+
+- Think about /workspaces/doodle2/specs/expandedRequirements.md.
+- Focus on planning epic 4
+- Document tasks for epic 4 in EpicTasks.md
+
+
+====
+
+Execute EpicTasks.md

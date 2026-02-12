@@ -6,13 +6,18 @@ import { ToolService } from '../../services/tool.service';
 import { DrawingEngineService } from '../../services/drawing-engine.service';
 import { DrawingPropertiesService } from '../../services/drawing-properties.service';
 import { SVGElementModel, Point } from '../../models/svg-element.model';
-import { screenToCanvasCoordinates, svgElementToDOM } from '../../utils/svg-utils';
 import { FrameService } from '../../services/frame.service';
+import { SelectionService } from '../../services/selection.service';
+import { KeyboardShortcutService } from '../../services/keyboard-shortcut.service';
+import { SelectionOverlayComponent } from '../selection/selection-overlay.component';
+import { Rect } from '../../models/selection.model';
+import { getElementsInRect, getSelectionBounds, hitTestElements, normalizeRect } from '../../utils/selection-utils';
+import { generateElementId } from '../../utils/svg-utils';
 
 @Component({
   selector: 'app-canvas',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, SelectionOverlayComponent],
   template: `
     <div class="canvas-container" #container>
       <div class="canvas-viewport" 
@@ -53,6 +58,7 @@ import { FrameService } from '../../services/frame.service';
                     [attr.fill]="getAttr(element, 'fill')"
                     [attr.stroke]="getAttr(element, 'stroke')"
                     [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                    [attr.data-id]="getElementId(element)"
                   />
                 }
                 @if (element.type === 'circle') {
@@ -63,6 +69,7 @@ import { FrameService } from '../../services/frame.service';
                     [attr.fill]="getAttr(element, 'fill')"
                     [attr.stroke]="getAttr(element, 'stroke')"
                     [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                    [attr.data-id]="getElementId(element)"
                   />
                 }
                 @if (element.type === 'ellipse') {
@@ -74,6 +81,7 @@ import { FrameService } from '../../services/frame.service';
                     [attr.fill]="getAttr(element, 'fill')"
                     [attr.stroke]="getAttr(element, 'stroke')"
                     [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                    [attr.data-id]="getElementId(element)"
                   />
                 }
                 @if (element.type === 'line') {
@@ -84,6 +92,7 @@ import { FrameService } from '../../services/frame.service';
                     [attr.y2]="getAttr(element, 'y2')"
                     [attr.stroke]="getAttr(element, 'stroke')"
                     [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                    [attr.data-id]="getElementId(element)"
                   />
                 }
                 @if (element.type === 'polygon') {
@@ -92,6 +101,7 @@ import { FrameService } from '../../services/frame.service';
                     [attr.fill]="getAttr(element, 'fill')"
                     [attr.stroke]="getAttr(element, 'stroke')"
                     [attr.stroke-width]="getAttr(element, 'strokeWidth')"
+                    [attr.data-id]="getElementId(element)"
                   />
                 }
                 @if (element.type === 'path') {
@@ -103,6 +113,7 @@ import { FrameService } from '../../services/frame.service';
                     [attr.stroke-opacity]="getAttr(element, 'strokeOpacity')"
                     [attr.stroke-linecap]="getAttr(element, 'strokeLinecap')"
                     [attr.stroke-linejoin]="getAttr(element, 'strokeLinejoin')"
+                    [attr.data-id]="getElementId(element)"
                   />
                 }
               }
@@ -208,6 +219,12 @@ import { FrameService } from '../../services/frame.service';
             </filter>
           </defs>
         </svg>
+        <app-selection-overlay
+          [width]="width()"
+          [height]="height()"
+          [selectionBounds]="selectionState().selectionBounds || null"
+          [selectionBox]="selectionBox()"
+        />
       </div>
 
       <!-- Canvas controls overlay -->
@@ -242,6 +259,7 @@ import { FrameService } from '../../services/frame.service';
       transform-origin: center center;
       transition: transform 0.1s ease;
       cursor: grab;
+      position: relative;
     }
 
     .canvas-viewport:active {
@@ -311,6 +329,8 @@ export class CanvasComponent implements OnInit, OnDestroy {
   private drawingEngine = inject(DrawingEngineService);
   private drawingPropertiesService = inject(DrawingPropertiesService);
   private frameService = inject(FrameService);
+  private selectionService = inject(SelectionService);
+  private keyboardShortcuts = inject(KeyboardShortcutService);
 
   // Inputs
   currentFrame = input<Frame | null>(null);
@@ -344,23 +364,49 @@ export class CanvasComponent implements OnInit, OnDestroy {
   // Drawing state
   protected previewElement = signal<SVGElementModel | null>(null);
   protected activeTool = this.toolService.activeTool;
+  protected selectionState = this.selectionService.selection;
+  protected selectionBox = signal<Rect | null>(null);
+
+  private isBoxSelecting = false;
+  private boxSelectStart: Point | null = null;
+  private boxSelectAdditive = false;
+  private registeredSelectionShortcuts: { key: string; ctrl?: boolean; shift?: boolean; alt?: boolean }[] = [];
 
   constructor() {
     // React to current frame changes
     effect(() => {
       const frame = this.currentFrame();
+      this.selectionService.setActiveFrame(frame?.id ?? null);
       if (frame) {
+        this.ensureFrameElementIds(frame);
         this.renderFrame(frame);
       }
+    });
+
+    effect(() => {
+      const frame = this.currentFrame();
+      const selection = this.selectionService.selection();
+      if (!frame || selection.selectedIds.length === 0) {
+        this.selectionService.setSelectionBounds(undefined);
+        return;
+      }
+
+      const selectedElements = frame.elements.filter((element: any) =>
+        selection.selectedIds.includes(element?.id)
+      );
+      const bounds = getSelectionBounds(selectedElements);
+      this.selectionService.setSelectionBounds(bounds);
     });
   }
 
   ngOnInit(): void {
     this.setupEventListeners();
+    this.registerSelectionShortcuts();
   }
 
   ngOnDestroy(): void {
     this.removeEventListeners();
+    this.unregisterSelectionShortcuts();
   }
 
   protected onWheel(event: WheelEvent): void {
@@ -375,11 +421,17 @@ export class CanvasComponent implements OnInit, OnDestroy {
     console.log('Mouse down - activeTool:', this.activeTool(), 'button:', event.button);
     
     // Pan tool or middle mouse button
-    if (this.activeTool() === 'pan' || event.button === 1 || event.shiftKey) {
+    if (this.activeTool() === 'pan' || event.button === 1) {
       event.preventDefault();
       this.isPanning = true;
       this.lastPanX = event.clientX;
       this.lastPanY = event.clientY;
+      return;
+    }
+
+    if (this.activeTool() === 'select' && event.button === 0) {
+      event.preventDefault();
+      this.handleSelectionStart(event);
       return;
     }
 
@@ -465,6 +517,12 @@ export class CanvasComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.isBoxSelecting) {
+      const point = this.getCanvasPoint(event);
+      this.updateBoxSelection(point);
+      return;
+    }
+
     // Drawing in progress
     if (this.toolService.isDrawing()) {
       const point = this.getCanvasPoint(event);
@@ -530,6 +588,11 @@ export class CanvasComponent implements OnInit, OnDestroy {
   private onMouseUp = (event: MouseEvent): void => {
     if (this.isPanning) {
       this.isPanning = false;
+      return;
+    }
+
+    if (this.isBoxSelecting) {
+      this.finishBoxSelection();
       return;
     }
 
@@ -700,11 +763,169 @@ export class CanvasComponent implements OnInit, OnDestroy {
    * Handle mouse leave (cancel drawing if in progress)
    */
   protected onMouseLeave(): void {
+    if (this.isBoxSelecting) {
+      this.cancelBoxSelection();
+    }
+
     if (this.toolService.isDrawing()) {
       this.toolService.cancelDrawing();
       this.toolService.clearPathPoints();
       this.previewElement.set(null);
     }
+  }
+
+  private handleSelectionStart(event: MouseEvent): void {
+    const frame = this.currentFrame();
+    if (!frame) return;
+
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+    const point = this.getCanvasPoint(event);
+    const targetId = this.getEventTargetId(event);
+    const hitId = targetId || hitTestElements(point, frame.elements as any[])?.id || null;
+
+    if (hitId) {
+      if (additive) {
+        this.selectionService.toggleSelection(hitId);
+      } else {
+        this.selectionService.setSelection([hitId]);
+      }
+      this.selectionService.setActiveMode('idle');
+      this.selectionService.setDragging(false);
+      this.selectionBox.set(null);
+      return;
+    }
+
+    if (!additive) {
+      this.selectionService.clearSelection();
+    }
+
+    this.startBoxSelection(point, additive);
+  }
+
+  private ensureFrameElementIds(frame: Frame): void {
+    if (!frame.elements || frame.elements.length === 0) return;
+    const needsUpdate = frame.elements.some((element: any) => !element?.id);
+    if (!needsUpdate) return;
+
+    const updatedElements = frame.elements.map((element: any) => {
+      if (!element) return element;
+      if (element.id) return element;
+      return {
+        ...element,
+        id: generateElementId()
+      };
+    });
+
+    const projId = this.projectId();
+    const scnId = this.sceneId();
+    if (projId && scnId) {
+      this.frameService.updateFrame(projId, scnId, frame.id, {
+        elements: updatedElements as any[]
+      });
+    }
+  }
+
+  private startBoxSelection(point: Point, additive: boolean): void {
+    this.isBoxSelecting = true;
+    this.boxSelectStart = point;
+    this.boxSelectAdditive = additive;
+    this.selectionService.setActiveMode('box-select');
+    this.selectionService.setDragging(true);
+    this.selectionBox.set({ x: point.x, y: point.y, width: 0, height: 0 });
+  }
+
+  private updateBoxSelection(point: Point): void {
+    if (!this.boxSelectStart) return;
+    const rect = normalizeRect(this.boxSelectStart, point);
+    this.selectionBox.set(rect);
+  }
+
+  private finishBoxSelection(): void {
+    const frame = this.currentFrame();
+    if (!frame || !this.boxSelectStart) {
+      this.cancelBoxSelection();
+      return;
+    }
+
+    const rect = this.selectionBox();
+    if (rect) {
+      const selectedIds = getElementsInRect(rect, frame.elements as any[]);
+      if (this.boxSelectAdditive) {
+        const current = this.selectionService.getSelection().selectedIds;
+        this.selectionService.setSelection([...current, ...selectedIds]);
+      } else {
+        this.selectionService.setSelection(selectedIds);
+      }
+    }
+
+    this.cancelBoxSelection();
+  }
+
+  private cancelBoxSelection(): void {
+    this.isBoxSelecting = false;
+    this.boxSelectStart = null;
+    this.boxSelectAdditive = false;
+    this.selectionBox.set(null);
+    this.selectionService.setActiveMode('idle');
+    this.selectionService.setDragging(false);
+  }
+
+  private getEventTargetId(event: MouseEvent): string | null {
+    const target = event.target as Element | null;
+    if (!target || !target.closest) return null;
+    const el = target.closest('[data-id]');
+    return el?.getAttribute('data-id') || null;
+  }
+
+  private registerSelectionShortcuts(): void {
+    this.registerSelectionShortcut({
+      key: 'a',
+      ctrl: true,
+      callback: () => this.selectAllElements(),
+      description: 'Select all elements',
+      context: 'selection'
+    });
+
+    this.registerSelectionShortcut({
+      key: 'escape',
+      callback: () => this.selectionService.clearSelection(),
+      description: 'Clear selection',
+      context: 'selection'
+    });
+  }
+
+  private registerSelectionShortcut(shortcut: {
+    key: string;
+    ctrl?: boolean;
+    shift?: boolean;
+    alt?: boolean;
+    callback: () => void;
+    description: string;
+    context?: string;
+  }): void {
+    this.keyboardShortcuts.register(shortcut);
+    this.registeredSelectionShortcuts.push({
+      key: shortcut.key,
+      ctrl: shortcut.ctrl,
+      shift: shortcut.shift,
+      alt: shortcut.alt
+    });
+  }
+
+  private unregisterSelectionShortcuts(): void {
+    this.registeredSelectionShortcuts.forEach(shortcut => {
+      this.keyboardShortcuts.unregister(shortcut.key, shortcut.ctrl, shortcut.shift, shortcut.alt);
+    });
+    this.registeredSelectionShortcuts = [];
+  }
+
+  private selectAllElements(): void {
+    const frame = this.currentFrame();
+    if (!frame) return;
+    const ids = frame.elements
+      .map((element: any) => element?.id)
+      .filter((id: string | undefined): id is string => !!id);
+    this.selectionService.setSelection(ids);
   }
 
   /**
@@ -720,5 +941,9 @@ export class CanvasComponent implements OnInit, OnDestroy {
       return element.properties[key];
     }
     return undefined;
+  }
+
+  protected getElementId(element: any): string | null {
+    return element?.id || element?.properties?.id || null;
   }
 }

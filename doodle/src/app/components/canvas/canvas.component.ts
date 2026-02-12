@@ -361,6 +361,13 @@ export class CanvasComponent implements OnInit, OnDestroy {
   private lastPanX = 0;
   private lastPanY = 0;
 
+  // Selection drag state
+  private isSelectionDragging = false;
+  private selectionDragStartPoint: Point | null = null;
+  private selectionDragFrameId: string | null = null;
+  private selectionDragStartElements = new Map<string, SVGElementModel | any>();
+  private lastDragDelta: Point | null = null;
+
   // Drawing state
   protected previewElement = signal<SVGElementModel | null>(null);
   protected activeTool = this.toolService.activeTool;
@@ -517,6 +524,12 @@ export class CanvasComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.isSelectionDragging) {
+      const point = this.getCanvasPoint(event);
+      this.updateSelectionDrag(point);
+      return;
+    }
+
     if (this.isBoxSelecting) {
       const point = this.getCanvasPoint(event);
       this.updateBoxSelection(point);
@@ -588,6 +601,11 @@ export class CanvasComponent implements OnInit, OnDestroy {
   private onMouseUp = (event: MouseEvent): void => {
     if (this.isPanning) {
       this.isPanning = false;
+      return;
+    }
+
+    if (this.isSelectionDragging) {
+      this.finishSelectionDrag();
       return;
     }
 
@@ -786,12 +804,21 @@ export class CanvasComponent implements OnInit, OnDestroy {
     if (hitId) {
       if (additive) {
         this.selectionService.toggleSelection(hitId);
-      } else {
+        this.selectionService.setActiveMode('idle');
+        this.selectionService.setDragging(false);
+        this.selectionBox.set(null);
+        return;
+      }
+
+      const currentSelection = this.selectionService.getSelection().selectedIds;
+      if (!currentSelection.includes(hitId)) {
         this.selectionService.setSelection([hitId]);
       }
-      this.selectionService.setActiveMode('idle');
-      this.selectionService.setDragging(false);
-      this.selectionBox.set(null);
+
+      const selectedIds = this.selectionService.getSelection().selectedIds.includes(hitId)
+        ? this.selectionService.getSelection().selectedIds
+        : [hitId];
+      this.startSelectionDrag(point, frame, selectedIds);
       return;
     }
 
@@ -800,6 +827,249 @@ export class CanvasComponent implements OnInit, OnDestroy {
     }
 
     this.startBoxSelection(point, additive);
+  }
+
+  private startSelectionDrag(point: Point, frame: Frame, selectedIds: string[]): void {
+    if (selectedIds.length === 0) return;
+    this.isSelectionDragging = true;
+    this.selectionDragStartPoint = point;
+    this.selectionDragFrameId = frame.id;
+    this.selectionDragStartElements.clear();
+    frame.elements.forEach((element: any) => {
+      if (element?.id && selectedIds.includes(element.id)) {
+        this.selectionDragStartElements.set(element.id, this.cloneElementForDrag(element));
+      }
+    });
+    this.lastDragDelta = { x: 0, y: 0 };
+    this.selectionService.setActiveMode('move');
+    this.selectionService.setDragging(true);
+    this.selectionBox.set(null);
+  }
+
+  private updateSelectionDrag(point: Point): void {
+    if (!this.selectionDragStartPoint) return;
+    const frame = this.currentFrame();
+    if (!frame || frame.id !== this.selectionDragFrameId) return;
+
+    const dx = point.x - this.selectionDragStartPoint.x;
+    const dy = point.y - this.selectionDragStartPoint.y;
+
+    if (this.lastDragDelta && dx === this.lastDragDelta.x && dy === this.lastDragDelta.y) {
+      return;
+    }
+    this.lastDragDelta = { x: dx, y: dy };
+
+    const updatedElements = frame.elements.map((element: any) => {
+      const id = element?.id;
+      if (!id || !this.selectionDragStartElements.has(id)) return element;
+      const base = this.selectionDragStartElements.get(id);
+      return this.translateElement(base, dx, dy);
+    });
+
+    const projId = this.projectId();
+    const scnId = this.sceneId();
+    if (projId && scnId) {
+      this.frameService.updateFrame(projId, scnId, frame.id, {
+        elements: updatedElements as any[]
+      });
+    }
+  }
+
+  private finishSelectionDrag(): void {
+    this.isSelectionDragging = false;
+    this.selectionDragStartPoint = null;
+    this.selectionDragFrameId = null;
+    this.selectionDragStartElements.clear();
+    this.lastDragDelta = null;
+    this.selectionService.setDragging(false);
+    this.selectionService.setActiveMode('idle');
+    this.frameUpdated.emit();
+  }
+
+  private cloneElementForDrag(element: any): any {
+    return {
+      ...element,
+      attributes: element.attributes ? { ...element.attributes } : undefined,
+      properties: element.properties ? { ...element.properties } : undefined,
+      transform: element.transform ? { ...element.transform } : undefined
+    };
+  }
+
+  private translateElement(element: any, dx: number, dy: number): any {
+    const sourceAttrs = element.attributes ? element.attributes : element.properties ? element.properties : {};
+    const updatedAttrs = this.translateAttributes(element.type, { ...sourceAttrs }, dx, dy);
+
+    if (element.attributes) {
+      return { ...element, attributes: updatedAttrs, updatedAt: new Date() };
+    }
+
+    if (element.properties) {
+      return { ...element, properties: updatedAttrs, updatedAt: new Date() };
+    }
+
+    return { ...element, attributes: updatedAttrs, updatedAt: new Date() };
+  }
+
+  private translateAttributes(type: string, attrs: Record<string, any>, dx: number, dy: number): Record<string, any> {
+    switch (type) {
+      case 'rect':
+        return {
+          ...attrs,
+          x: this.coerceNumber(attrs['x']) + dx,
+          y: this.coerceNumber(attrs['y']) + dy
+        };
+      case 'circle':
+      case 'ellipse':
+        return {
+          ...attrs,
+          cx: this.coerceNumber(attrs['cx']) + dx,
+          cy: this.coerceNumber(attrs['cy']) + dy
+        };
+      case 'line':
+        return {
+          ...attrs,
+          x1: this.coerceNumber(attrs['x1']) + dx,
+          y1: this.coerceNumber(attrs['y1']) + dy,
+          x2: this.coerceNumber(attrs['x2']) + dx,
+          y2: this.coerceNumber(attrs['y2']) + dy
+        };
+      case 'polygon':
+      case 'polyline':
+        return {
+          ...attrs,
+          points: this.translatePoints(attrs['points'], dx, dy)
+        };
+      case 'path':
+        return {
+          ...attrs,
+          d: this.translatePathData(attrs['d'], dx, dy)
+        };
+      default:
+        return attrs;
+    }
+  }
+
+  private translatePoints(points: string | undefined, dx: number, dy: number): string | undefined {
+    if (!points) return points;
+    const translated = points
+      .trim()
+      .split(/\s+/)
+      .map(pair => {
+        const [xRaw, yRaw] = pair.split(',');
+        const x = this.coerceNumber(xRaw) + dx;
+        const y = this.coerceNumber(yRaw) + dy;
+        return `${x},${y}`;
+      });
+    return translated.join(' ');
+  }
+
+  private translatePathData(d: string | undefined, dx: number, dy: number): string | undefined {
+    if (!d) return d;
+    const tokens = d.match(/[a-zA-Z]|-?\d*\.?\d+(?:e[-+]?\d+)?/g);
+    if (!tokens) return d;
+
+    const result: string[] = [];
+    let i = 0;
+    while (i < tokens.length) {
+      const token = tokens[i];
+      if (/^[a-zA-Z]$/.test(token)) {
+        const command = token;
+        result.push(command);
+        i++;
+
+        const isRelative = command === command.toLowerCase();
+        const upper = command.toUpperCase();
+        const paramCount = this.getPathParamCount(upper);
+        if (paramCount === 0) {
+          continue;
+        }
+
+        const params: number[] = [];
+        while (i < tokens.length && !/^[a-zA-Z]$/.test(tokens[i])) {
+          params.push(parseFloat(tokens[i]));
+          i++;
+        }
+
+        for (let idx = 0; idx < params.length; idx += paramCount) {
+          const segment = params.slice(idx, idx + paramCount);
+          if (segment.length < paramCount) break;
+          if (!isRelative) {
+            switch (upper) {
+              case 'M':
+              case 'L':
+              case 'T':
+                segment[0] += dx;
+                segment[1] += dy;
+                break;
+              case 'S':
+              case 'Q':
+                segment[0] += dx;
+                segment[1] += dy;
+                segment[2] += dx;
+                segment[3] += dy;
+                break;
+              case 'C':
+                segment[0] += dx;
+                segment[1] += dy;
+                segment[2] += dx;
+                segment[3] += dy;
+                segment[4] += dx;
+                segment[5] += dy;
+                break;
+              case 'H':
+                segment[0] += dx;
+                break;
+              case 'V':
+                segment[0] += dy;
+                break;
+              case 'A':
+                segment[5] += dx;
+                segment[6] += dy;
+                break;
+              default:
+                break;
+            }
+          }
+          result.push(segment.join(' '));
+        }
+
+        continue;
+      }
+
+      result.push(token);
+      i++;
+    }
+
+    return result.join(' ');
+  }
+
+  private getPathParamCount(command: string): number {
+    switch (command) {
+      case 'M':
+      case 'L':
+      case 'T':
+        return 2;
+      case 'S':
+      case 'Q':
+        return 4;
+      case 'C':
+        return 6;
+      case 'H':
+      case 'V':
+        return 1;
+      case 'A':
+        return 7;
+      case 'Z':
+        return 0;
+      default:
+        return 0;
+    }
+  }
+
+  private coerceNumber(value: any): number {
+    if (typeof value === 'number') return value;
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   private ensureFrameElementIds(frame: Frame): void {

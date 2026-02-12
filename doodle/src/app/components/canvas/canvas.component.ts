@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, signal, effect, input, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
 import { Frame } from '../../models/frame.model';
 import { OnionSkinService } from '../../services/onion-skin.service';
 import { ToolService } from '../../services/tool.service';
@@ -9,6 +10,7 @@ import { SVGElementModel, Point } from '../../models/svg-element.model';
 import { FrameService } from '../../services/frame.service';
 import { SelectionService } from '../../services/selection.service';
 import { KeyboardShortcutService } from '../../services/keyboard-shortcut.service';
+import { UndoService } from '../../services/undo.service';
 import { SelectionOverlayComponent } from '../selection/selection-overlay.component';
 import { Rect } from '../../models/selection.model';
 import { getElementsInRect, getSelectionBounds, hitTestElements, normalizeRect } from '../../utils/selection-utils';
@@ -331,6 +333,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
   private frameService = inject(FrameService);
   private selectionService = inject(SelectionService);
   private keyboardShortcuts = inject(KeyboardShortcutService);
+  private undoService = inject(UndoService);
 
   // Inputs
   currentFrame = input<Frame | null>(null);
@@ -378,6 +381,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
   private boxSelectStart: Point | null = null;
   private boxSelectAdditive = false;
   private registeredSelectionShortcuts: { key: string; ctrl?: boolean; shift?: boolean; alt?: boolean }[] = [];
+  private undoSubscription?: Subscription;
 
   constructor() {
     // React to current frame changes
@@ -409,11 +413,21 @@ export class CanvasComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.setupEventListeners();
     this.registerSelectionShortcuts();
+    
+    // Subscribe to undo events to refresh UI
+    this.undoSubscription = this.undoService.onUndo$.subscribe((event) => {
+      const currentFrameId = this.currentFrame()?.id;
+      if (currentFrameId === event.frameId) {
+        console.log('[Canvas] Undo event received, emitting frame update');
+        this.frameUpdated.emit();
+      }
+    });
   }
 
   ngOnDestroy(): void {
     this.removeEventListeners();
     this.unregisterSelectionShortcuts();
+    this.undoSubscription?.unsubscribe();
   }
 
   protected onWheel(event: WheelEvent): void {
@@ -680,6 +694,10 @@ export class CanvasComponent implements OnInit, OnDestroy {
           elements: updatedElements as any[]
         });
         console.log('Frame updated successfully, emitting event');
+        
+        // Record the action for undo
+        this.undoService.recordElementAdded(projId, scnId, frame.id, preview);
+        
         // Emit event to parent to refresh frames
         this.frameUpdated.emit();
       } catch (error) {

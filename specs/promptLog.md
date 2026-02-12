@@ -77,3 +77,7 @@ Remove the following tools from the canvas tool box:
 - polygon
 - star
 - triangle
+
+====
+
+As a canvas drawer, I should be able to undo the last draw action using CTRL+Z.

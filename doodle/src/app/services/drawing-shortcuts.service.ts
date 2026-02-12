@@ -3,6 +3,7 @@ import { KeyboardShortcutService } from './keyboard-shortcut.service';
 import { ToolService } from './tool.service';
 import { DrawingPropertiesService } from './drawing-properties.service';
 import { ColorService } from './color.service';
+import { UndoService } from './undo.service';
 
 @Injectable({
   providedIn: 'root'
@@ -12,6 +13,7 @@ export class DrawingShortcutsService {
   private toolService = inject(ToolService);
   private propertiesService = inject(DrawingPropertiesService);
   private colorService = inject(ColorService);
+  private undoService = inject(UndoService);
 
   /**
    * Register all drawing-related keyboard shortcuts
@@ -25,6 +27,9 @@ export class DrawingShortcutsService {
     
     // Opacity shortcuts
     this.registerOpacityShortcuts();
+    
+    // Undo shortcut
+    this.registerUndoShortcuts();
   }
 
   /**
@@ -187,6 +192,20 @@ export class DrawingShortcutsService {
         this.propertiesService.setStrokeWidth(Math.min(50, current + 1));
       },
       description: 'Increase stroke width',
+      context: 'drawing'
+    });
+  }
+
+  /**
+   * Register undo/redo shortcuts
+   */
+  private registerUndoShortcuts(): void {
+    // Ctrl+Z - Undo
+    this.keyboardService.register({
+      key: 'z',
+      ctrl: true,
+      callback: () => this.undoService.undo(),
+      description: 'Undo last drawing action',
       context: 'drawing'
     });
   }

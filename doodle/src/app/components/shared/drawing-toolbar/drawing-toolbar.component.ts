@@ -106,15 +106,12 @@ export class DrawingToolbarComponent {
   }
 
   getToolIcon(tool: ToolType): string {
-    const icons: Record<ToolType, string> = {
+    const icons: Partial<Record<ToolType, string>> = {
       'select': '⬆',
       'rectangle': '▭',
       'circle': '○',
       'ellipse': '◯',
       'line': '⁄',
-      'polygon': '⬡',
-      'star': '★',
-      'triangle': '△',
       'pen': '✏',
       'pencil': '✐',
       'brush': '🖌',

@@ -59,30 +59,6 @@ export class ToolService {
       cursor: 'crosshair'
     },
     {
-      id: 'polygon',
-      name: 'Polygon',
-      type: 'polygon',
-      icon: 'pentagon',
-      shortcut: 'P',
-      cursor: 'crosshair'
-    },
-    {
-      id: 'star',
-      name: 'Star',
-      type: 'star',
-      icon: 'star',
-      shortcut: 'S',
-      cursor: 'crosshair'
-    },
-    {
-      id: 'triangle',
-      name: 'Triangle',
-      type: 'triangle',
-      icon: 'triangle',
-      shortcut: 'T',
-      cursor: 'crosshair'
-    },
-    {
       id: 'pen',
       name: 'Pen',
       type: 'pen',

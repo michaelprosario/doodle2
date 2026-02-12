@@ -1157,6 +1157,20 @@ export class CanvasComponent implements OnInit, OnDestroy {
     });
 
     this.registerSelectionShortcut({
+      key: 'delete',
+      callback: () => this.deleteSelectedElements(),
+      description: 'Delete selected elements',
+      context: 'selection'
+    });
+
+    this.registerSelectionShortcut({
+      key: 'backspace',
+      callback: () => this.deleteSelectedElements(),
+      description: 'Delete selected elements',
+      context: 'selection'
+    });
+
+    this.registerSelectionShortcut({
       key: 'escape',
       callback: () => this.selectionService.clearSelection(),
       description: 'Clear selection',
@@ -1196,6 +1210,30 @@ export class CanvasComponent implements OnInit, OnDestroy {
       .map((element: any) => element?.id)
       .filter((id: string | undefined): id is string => !!id);
     this.selectionService.setSelection(ids);
+  }
+
+  private deleteSelectedElements(): void {
+    if (this.activeTool() !== 'select' || this.toolService.isDrawing()) return;
+    const frame = this.currentFrame();
+    if (!frame) return;
+
+    const selectedIds = this.selectionService.getSelection().selectedIds;
+    if (selectedIds.length === 0) return;
+
+    const updatedElements = frame.elements.filter((element: any) => {
+      const id = element?.id || element?.properties?.id;
+      return !id || !selectedIds.includes(id);
+    });
+
+    const projId = this.projectId();
+    const scnId = this.sceneId();
+    if (projId && scnId) {
+      this.frameService.updateFrame(projId, scnId, frame.id, {
+        elements: updatedElements as any[]
+      });
+      this.selectionService.clearSelection();
+      this.frameUpdated.emit();
+    }
   }
 
   /**

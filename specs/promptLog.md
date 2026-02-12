@@ -70,3 +70,10 @@ Given
 When I press DELETE
 
 Then the system should delete the selected object from the canvas.
+
+====
+
+Remove the following tools from the canvas tool box:
+- polygon
+- star
+- triangle

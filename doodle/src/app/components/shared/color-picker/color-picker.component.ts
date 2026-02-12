@@ -106,28 +106,6 @@ import { DrawingPropertiesService } from '../../../services/drawing-properties.s
         />
       </div>
 
-      <!-- Color Palettes -->
-      <div class="palettes">
-        <label>Palettes</label>
-        <div class="palette-grid">
-          @for (palette of palettes; track palette.id) {
-            <div class="palette-section">
-              <div class="palette-name">{{ palette.name }}</div>
-              <div class="palette-colors">
-                @for (color of palette.colors; track color) {
-                  <div 
-                    class="palette-color"
-                    [style.background-color]="color"
-                    (click)="selectColor(color)"
-                    [title]="color"
-                  ></div>
-                }
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-
       <!-- Recent Colors -->
       @if (recentColors().length > 0) {
         <div class="recent-colors">
@@ -280,55 +258,6 @@ import { DrawingPropertiesService } from '../../../services/drawing-properties.s
       border: none;
     }
 
-    .palettes {
-      margin-top: 20px;
-    }
-
-    .palettes label {
-      display: block;
-      font-size: 12px;
-      color: #ccc;
-      margin-bottom: 8px;
-      font-weight: 600;
-    }
-
-    .palette-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .palette-section {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .palette-name {
-      font-size: 10px;
-      color: #999;
-      text-transform: uppercase;
-    }
-
-    .palette-colors {
-      display: grid;
-      grid-template-columns: repeat(8, 1fr);
-      gap: 4px;
-    }
-
-    .palette-color {
-      width: 24px;
-      height: 24px;
-      border-radius: 2px;
-      cursor: pointer;
-      border: 1px solid #333;
-    }
-
-    .palette-color:hover {
-      border-color: #fff;
-      transform: scale(1.1);
-    }
-
     .recent-colors {
       margin-top: 16px;
     }
@@ -371,7 +300,6 @@ export class ColorPickerComponent {
   fillOpacity = this.propertiesService.fillOpacity;
   strokeOpacity = this.propertiesService.strokeOpacity;
 
-  palettes = this.colorService.getPalettes();
   recentColors = signal(this.colorService.getRecentColors());
 
   protected Math = Math;

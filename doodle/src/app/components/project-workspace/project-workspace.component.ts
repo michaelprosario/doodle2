@@ -16,6 +16,7 @@ import { CanvasComponent } from '../canvas/canvas.component';
 import { ButtonComponent } from '../shared/button/button.component';
 import { DrawingToolbarComponent } from '../shared/drawing-toolbar/drawing-toolbar.component';
 import { ColorPickerComponent } from '../shared/color-picker/color-picker.component';
+import { ModalComponent } from '../shared/modal/modal.component';
 import { Frame } from '../../models/frame.model';
 import { Scene } from '../../models/scene.model';
 
@@ -29,7 +30,8 @@ import { Scene } from '../../models/scene.model';
     CanvasComponent, 
     ButtonComponent,
     DrawingToolbarComponent,
-    ColorPickerComponent
+    ColorPickerComponent,
+    ModalComponent
   ],
   template: `
     <div class="workspace" *ngIf="project()">
@@ -45,6 +47,12 @@ import { Scene } from '../../models/scene.model';
           <!-- Tools will be added in Epic 3 -->
         </div>
         <div class="header-right">
+          <button class="scene-manager-btn" (click)="openSceneManager()">
+            Scenes
+          </button>
+          <button class="properties-toggle-btn" (click)="toggleProperties()">
+            {{ propertiesCollapsed() ? 'Show Properties' : 'Hide Properties' }}
+          </button>
           <button 
             class="onion-skin-btn"
             [class.active]="onionSkinEnabled()"
@@ -63,14 +71,6 @@ import { Scene } from '../../models/scene.model';
         <!-- Drawing Tools Sidebar -->
         <aside class="tools-sidebar">
           <app-drawing-toolbar></app-drawing-toolbar>
-        </aside>
-
-        <!-- Scene Manager Sidebar -->
-        <aside class="sidebar">
-          <app-scene-manager 
-            [projectId]="projectId()"
-            (sceneSelect)="onSceneSelect($event)">
-          </app-scene-manager>
         </aside>
 
         <main class="main-content">
@@ -107,10 +107,26 @@ import { Scene } from '../../models/scene.model';
         </main>
 
         <!-- Properties Sidebar -->
-        <aside class="properties-sidebar">
+        <aside class="properties-sidebar" [class.collapsed]="propertiesCollapsed()">
           <app-color-picker></app-color-picker>
+          <button class="properties-collapse-handle" (click)="toggleProperties()" aria-label="Toggle properties panel">
+            {{ propertiesCollapsed() ? '⟨' : '⟩' }}
+          </button>
         </aside>
       </div>
+
+      <app-modal
+        [isOpen]="sceneManagerOpen()"
+        title="Scenes"
+        [showFooter]="false"
+        (closed)="closeSceneManager()">
+        <div class="scene-manager-modal">
+          <app-scene-manager
+            [projectId]="projectId()"
+            (sceneSelect)="onSceneSelect($event); closeSceneManager()">
+          </app-scene-manager>
+        </div>
+      </app-modal>
     </div>
 
     <div class="error-state" *ngIf="!project()">
@@ -157,7 +173,9 @@ import { Scene } from '../../models/scene.model';
     .header-right {
       flex: 1;
       justify-content: flex-end;
-    }back-button {
+    }
+
+    .back-button {
       background: none;
       border: 1px solid #555;
       color: #fff;
@@ -194,6 +212,36 @@ import { Scene } from '../../models/scene.model';
       transition: all 0.2s;
     }
 
+    .scene-manager-btn {
+      background: #333;
+      border: 1px solid #555;
+      color: #fff;
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .scene-manager-btn:hover {
+      background: #444;
+    }
+
+    .properties-toggle-btn {
+      background: #333;
+      border: 1px solid #555;
+      color: #fff;
+      cursor: pointer;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .properties-toggle-btn:hover {
+      background: #444;
+    }
+
     .onion-skin-btn:hover {
       background: #444;
     }
@@ -221,18 +269,52 @@ import { Scene } from '../../models/scene.model';
       overflow-y: auto;
     }
 
-    .sidebar {
-      width: 300px;
-      background: #2a2a2a;
-      border-right: 1px solid #444;
-      overflow-y: auto;
-    }
-
     .properties-sidebar {
       width: 280px;
       background: #2a2a2a;
       border-left: 1px solid #444;
       overflow-y: auto;
+      position: relative;
+      transition: width 0.2s ease, transform 0.2s ease;
+      padding-right: 12px;
+    }
+
+    .properties-sidebar.collapsed {
+      width: 36px;
+      overflow: hidden;
+      padding-right: 0;
+    }
+
+    .properties-sidebar.collapsed app-color-picker {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .properties-collapse-handle {
+      position: absolute;
+      top: 12px;
+      right: -16px;
+      width: 32px;
+      height: 32px;
+      border-radius: 16px;
+      border: 1px solid #444;
+      background: #2a2a2a;
+      color: #ccc;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+
+    .properties-collapse-handle:hover {
+      background: #333;
+      color: #fff;
+    }
+
+    .scene-manager-modal {
+      width: min(900px, 90vw);
+      max-height: 70vh;
     }
 
     .main-content {
@@ -282,11 +364,6 @@ import { Scene } from '../../models/scene.model';
         flex-direction: column;
       }
 
-      .sidebar {
-        width: 100%;
-        max-height: 200px;
-      }
-
       .header-left, .header-center, .header-right {
         flex: none;
       }
@@ -311,6 +388,8 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   // Signals for state
   activeScene = signal<Scene | null>(null);
   frames = signal<Frame[]>([]);
+  sceneManagerOpen = signal(false);
+  propertiesCollapsed = signal(false);
 
   projectId = computed(() => {
     const id = this.route.snapshot.paramMap.get('id');
@@ -364,6 +443,18 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
 
   goToDashboard(): void {
     this.router.navigate(['/dashboard']);
+  }
+
+  openSceneManager(): void {
+    this.sceneManagerOpen.set(true);
+  }
+
+  closeSceneManager(): void {
+    this.sceneManagerOpen.set(false);
+  }
+
+  toggleProperties(): void {
+    this.propertiesCollapsed.update(value => !value);
   }
 
   manualSave(): void {

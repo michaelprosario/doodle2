@@ -44,9 +44,29 @@ drawing on canvas do not work.
 
 - Think about /workspaces/doodle2/specs/expandedRequirements.md.
 - Focus on planning epic 4
-- Document tasks for epic 4 in EpicTasks.md
+- Document tasks for epic 4 in specs/ElementSelectionTasks.md
 
 
 ====
 
-Execute EpicTasks.md
+Execute specs/ElementSelectionTasks.md
+
+===
+
+As a canvas drawer, I would like to have more screen area for drawing.  Refactor the UI so that scene management is performed in a modal screen.
+
+===
+
+As a canvas drawer, I would like to have more screen area for drawing.  Refactor the UI so that the color and stroke picker can be collapsed to the side.
+
+==== 
+
+Given
+- I am actively drawing on a valid canvas
+- I have drawn a rectangle on the canvas
+- I have the select tool active
+- I have selected the rectangle
+
+When I press DELETE
+
+Then the system should delete the selected object from the canvas.

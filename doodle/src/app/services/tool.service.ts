@@ -51,14 +51,6 @@ export class ToolService {
       cursor: 'crosshair'
     },
     {
-      id: 'pen',
-      name: 'Pen',
-      type: 'pen',
-      icon: 'pen-tool',
-      shortcut: 'P',
-      cursor: 'crosshair'
-    },
-    {
       id: 'pencil',
       name: 'Pencil',
       type: 'pencil',

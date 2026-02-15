@@ -109,3 +109,26 @@ As a canvas drawer, I should be able to undo the last draw action using CTRL+Z.
 ====
 
 Remove the circle tool from tools.
+
+=====
+
+Remove Pen tool from tools.
+
+
+====
+
+As a canvas drawer, I should be able to use the eye dropper tool
+
+### given
+- I a have an active canvas
+- I have draw a red box on the canvas
+- I have the eye dropper tool active
+
+### when
+- I hover my mouse over a red thing
+- I click my mouse
+
+### then
+- The system should inspect the pixel location of the mouse
+- The system should extract the color at the pixel location
+- The system should set the stroke color to the extracted color.

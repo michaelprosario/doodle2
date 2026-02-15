@@ -111,7 +111,6 @@ export class DrawingToolbarComponent {
       'rectangle': '▭',
       'ellipse': '◯',
       'line': '⁄',
-      'pen': '✏',
       'pencil': '✐',
       'brush': '🖌',
       'eraser': '⌫',

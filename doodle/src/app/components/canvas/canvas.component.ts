@@ -456,6 +456,12 @@ export class CanvasComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.activeTool() === 'eyedropper' && event.button === 0) {
+      event.preventDefault();
+      this.handleEyedropperPick(event);
+      return;
+    }
+
     // Drawing tools
     if (this.isDrawingTool() && event.button === 0) {
       console.log('Starting drawing with tool:', this.activeTool());
@@ -784,7 +790,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
    */
   private isDrawingTool(): boolean {
     const tool = this.activeTool();
-    return ['rectangle', 'ellipse', 'line', 'polygon', 'star', 'triangle', 'pen', 'pencil'].includes(tool);
+    return ['rectangle', 'ellipse', 'line', 'polygon', 'star', 'triangle', 'pencil'].includes(tool);
   }
 
   /**
@@ -792,7 +798,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
    */
   private isFreehandTool(): boolean {
     const tool = this.activeTool();
-    return ['pen', 'pencil'].includes(tool);
+    return ['pencil'].includes(tool);
   }
 
   /**
@@ -1273,5 +1279,172 @@ export class CanvasComponent implements OnInit, OnDestroy {
 
   protected getElementId(element: any): string | null {
     return element?.id || element?.properties?.id || null;
+  }
+
+  private handleEyedropperPick(event: MouseEvent): void {
+    console.log('[Eyedropper] Starting color pick at', event.clientX, event.clientY);
+    const picked = this.getEyedropperColor(event);
+    console.log('[Eyedropper] Picked color:', picked);
+    if (picked) {
+      this.drawingPropertiesService.setStrokeColor(picked);
+      console.log('[Eyedropper] Stroke color updated to:', picked);
+    } else {
+      console.warn('[Eyedropper] No color found at cursor position');
+    }
+  }
+
+  private getEyedropperColor(event: MouseEvent): string | null {
+    const frame = this.currentFrame();
+    const point = this.getCanvasPoint(event);
+    console.log('[Eyedropper] Canvas point:', point);
+
+    // Strategy 1: Hit test on frame elements (model-based)
+    if (frame) {
+      console.log('[Eyedropper] Testing', frame.elements.length, 'elements');
+      const hit = hitTestElements(point, frame.elements as any[]);
+      if (hit) {
+        console.log('[Eyedropper] Hit element ID:', hit.id);
+        const element = frame.elements.find((item: any) =>
+          (item?.id || item?.properties?.id) === hit.id
+        ) as any;
+        
+        if (element) {
+          const attrs = (element?.attributes || element?.properties || {}) as Record<string, any>;
+          console.log('[Eyedropper] Element type:', element.type, 'attributes:', attrs);
+          const picked = this.pickColorFromAttributes(attrs);
+          console.log('[Eyedropper] Picked from attributes:', picked);
+          const normalized = picked ? this.normalizeColor(picked) : null;
+          if (normalized) {
+            console.log('[Eyedropper] Strategy 1 success:', normalized);
+            return normalized;
+          }
+        }
+      } else {
+        console.log('[Eyedropper] No element hit at point');
+      }
+    }
+
+    // Strategy 2: DOM-based element lookup
+    console.log('[Eyedropper] Trying DOM-based lookup');
+    const svgElement = this.getSvgElementFromPoint(event);
+    if (svgElement) {
+      console.log('[Eyedropper] Found SVG element:', svgElement.tagName, svgElement.getAttribute('data-id'));
+      
+      // Try getting color from element attributes first
+      const fill = svgElement.getAttribute('fill');
+      const stroke = svgElement.getAttribute('stroke');
+      console.log('[Eyedropper] SVG attributes - fill:', fill, 'stroke:', stroke);
+      
+      let picked = this.pickColorFromAttributes({ fill, stroke });
+      let normalized = picked ? this.normalizeColor(picked) : null;
+      
+      if (normalized) {
+        console.log('[Eyedropper] Strategy 2a success:', normalized);
+        return normalized;
+      }
+      
+      // Fallback to computed style
+      const style = window.getComputedStyle(svgElement as Element);
+      console.log('[Eyedropper] Computed style - fill:', style.fill, 'stroke:', style.stroke);
+      picked = this.pickColorFromAttributes({
+        fill: style.fill,
+        stroke: style.stroke
+      });
+      normalized = picked ? this.normalizeColor(picked) : null;
+      
+      if (normalized) {
+        console.log('[Eyedropper] Strategy 2b success:', normalized);
+        return normalized;
+      }
+    }
+
+    console.log('[Eyedropper] All strategies failed');
+    return null;
+  }
+
+  private pickColorFromAttributes(attrs: Record<string, any>): string | null {
+    const fill = typeof attrs['fill'] === 'string' ? attrs['fill'] : null;
+    if (fill && fill !== 'none' && fill !== 'transparent') {
+      return fill;
+    }
+    const stroke = typeof attrs['stroke'] === 'string' ? attrs['stroke'] : null;
+    if (stroke && stroke !== 'none' && stroke !== 'transparent') {
+      return stroke;
+    }
+    return null;
+  }
+
+  private getSvgElementFromPoint(event: MouseEvent): SVGElement | null {
+    const canvas = this.canvasRef?.nativeElement;
+    if (!canvas) return null;
+
+    const elements = typeof document.elementsFromPoint === 'function'
+      ? document.elementsFromPoint(event.clientX, event.clientY)
+      : [document.elementFromPoint(event.clientX, event.clientY)].filter(Boolean) as Element[];
+
+    // Look for actual shape elements, not containers
+    const shapeElements = ['rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'path'];
+    
+    for (const el of elements) {
+      if (el instanceof SVGElement && canvas.contains(el)) {
+        // Prefer shape elements over containers
+        const tagName = el.tagName.toLowerCase();
+        if (shapeElements.includes(tagName)) {
+          return el;
+        }
+      }
+    }
+    
+    // Fallback: return any SVG element within canvas
+    for (const el of elements) {
+      if (el instanceof SVGElement && canvas.contains(el)) {
+        return el;
+      }
+    }
+    
+    return null;
+  }
+
+  private normalizeColor(color: string): string | null {
+    const trimmed = color.trim().toLowerCase();
+    if (!trimmed || trimmed === 'none' || trimmed === 'transparent') {
+      return null;
+    }
+
+    const ctx = this.getColorContext();
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#000000';
+    ctx.fillStyle = trimmed;
+    const normalized = ctx.fillStyle;
+
+    if (normalized.startsWith('#')) {
+      if (normalized.length === 4) {
+        const r = normalized[1];
+        const g = normalized[2];
+        const b = normalized[3];
+        return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+      }
+      return normalized.toLowerCase();
+    }
+
+    const match = normalized.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+    if (!match) return null;
+
+    const r = this.toHex(match[1]);
+    const g = this.toHex(match[2]);
+    const b = this.toHex(match[3]);
+    return `#${r}${g}${b}`.toLowerCase();
+  }
+
+  private getColorContext(): CanvasRenderingContext2D | null {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    return canvas.getContext('2d');
+  }
+
+  private toHex(value: string): string {
+    const num = Math.max(0, Math.min(255, parseInt(value, 10)));
+    return num.toString(16).padStart(2, '0');
   }
 }

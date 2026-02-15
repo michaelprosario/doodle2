@@ -68,14 +68,6 @@ export class DrawingShortcutsService {
       context: 'drawing'
     });
 
-    // P - Pen tool
-    this.keyboardService.register({
-      key: 'p',
-      callback: () => this.toolService.setActiveTool('pen'),
-      description: 'Pen tool (Bezier)',
-      context: 'drawing'
-    });
-
     // N - Pencil tool
     this.keyboardService.register({
       key: 'n',

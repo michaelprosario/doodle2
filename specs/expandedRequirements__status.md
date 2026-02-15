@@ -97,12 +97,10 @@ A user-friendly, web-based SVG animation software that empowers animators to cre
    - Line tool
 
 2. **Path & Curve Tools**
-   - Pen tool (Bezier curves with anchor points)
+   [remove]- Pen tool (Bezier curves with anchor points)
    - Freehand/Pencil tool (smooth stroke drawing)
    - Brush tool (variable width strokes)
-   - Straight line tool
-   - Curved line tool (quadratic and cubic curves)
-   - Path editing (modify anchor points and handles)
+   [x]- Straight line tool
 
 3. **Drawing Properties**
    - Stroke color picker

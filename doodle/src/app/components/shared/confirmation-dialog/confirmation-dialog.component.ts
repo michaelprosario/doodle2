@@ -12,7 +12,7 @@ import { ButtonComponent } from '../button/button.component';
       [isOpen]="isOpen"
       [title]="title"
       (closed)="onCancel()">
-      <p>{{ message }}</p>
+      <p class="message">{{ message }}</p>
       <div footer>
         <app-button variant="ghost" (click)="onCancel()">
           {{ cancelText }}
@@ -22,7 +22,15 @@ import { ButtonComponent } from '../button/button.component';
         </app-button>
       </div>
     </app-modal>
-  `
+  `,
+  styles: [`
+    .message {
+      margin: 0;
+      color: #374151;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+    }
+  `]
 })
 export class ConfirmationDialogComponent {
   @Input() isOpen = false;

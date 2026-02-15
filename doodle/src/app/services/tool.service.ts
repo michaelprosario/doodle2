@@ -35,14 +35,6 @@ export class ToolService {
       cursor: 'crosshair'
     },
     {
-      id: 'circle',
-      name: 'Circle',
-      type: 'circle',
-      icon: 'circle',
-      shortcut: 'C',
-      cursor: 'crosshair'
-    },
-    {
       id: 'ellipse',
       name: 'Ellipse',
       type: 'ellipse',

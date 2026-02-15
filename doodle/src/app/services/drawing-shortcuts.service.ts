@@ -52,14 +52,6 @@ export class DrawingShortcutsService {
       context: 'drawing'
     });
 
-    // C - Circle tool
-    this.keyboardService.register({
-      key: 'c',
-      callback: () => this.toolService.setActiveTool('circle'),
-      description: 'Circle tool',
-      context: 'drawing'
-    });
-
     // E - Ellipse tool
     this.keyboardService.register({
       key: 'e',

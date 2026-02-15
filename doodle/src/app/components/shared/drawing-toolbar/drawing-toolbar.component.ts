@@ -109,7 +109,6 @@ export class DrawingToolbarComponent {
     const icons: Partial<Record<ToolType, string>> = {
       'select': '⬆',
       'rectangle': '▭',
-      'circle': '○',
       'ellipse': '◯',
       'line': '⁄',
       'pen': '✏',

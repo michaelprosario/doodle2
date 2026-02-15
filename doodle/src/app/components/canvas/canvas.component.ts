@@ -784,7 +784,7 @@ export class CanvasComponent implements OnInit, OnDestroy {
    */
   private isDrawingTool(): boolean {
     const tool = this.activeTool();
-    return ['rectangle', 'circle', 'ellipse', 'line', 'polygon', 'star', 'triangle', 'pen', 'pencil'].includes(tool);
+    return ['rectangle', 'ellipse', 'line', 'polygon', 'star', 'triangle', 'pen', 'pencil'].includes(tool);
   }
 
   /**
@@ -890,6 +890,8 @@ export class CanvasComponent implements OnInit, OnDestroy {
       this.frameService.updateFrame(projId, scnId, frame.id, {
         elements: updatedElements as any[]
       });
+      // Emit frameUpdated to trigger visual refresh during drag
+      this.frameUpdated.emit();
     }
   }
 

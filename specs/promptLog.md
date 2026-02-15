@@ -81,3 +81,31 @@ Remove the following tools from the canvas tool box:
 ====
 
 As a canvas drawer, I should be able to undo the last draw action using CTRL+Z.
+
+====
+
+2/15
+### given
+- i am using the scene list screen
+### when
+
+- i have clicked the delete button on an existing scene
+
+### then
+- the system showed me the delete modal
+- the content of the model is largely blank
+
+### Given
+- I am drawing on the canvas using rectangle tool
+- I created a rectangle
+- I have select tool engaged
+
+### When
+- I drag an object on the canvas using the select tool
+
+### Then
+- The system should visualize the movement of the object 
+
+====
+
+Remove the circle tool from tools.
